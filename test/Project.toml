@@ -1,28 +1,13 @@
-name = "GPUGraphs"
-uuid = "fd5a6e86-c761-4989-bab7-5b3464417f6b"
-authors = ["AntoineBut <antoine.buttier@epfl.ch> and contributors"]
-version = "1.0.0-DEV"
-
 [deps]
+Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 GPUArrays = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
-Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
+GPUGraphs = "fd5a6e86-c761-4989-bab7-5b3464417f6b"
+JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
 JuliaFormatter = "98e50ef6-434e-11e9-1051-2b60c6c9e899"
 KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
-
-[compat]
-JuliaFormatter = "1.0.62"
-LinearAlgebra = "1.11.0"
-Metal = "1.5.1"
-Revise = "3.7.2"
-SparseArrays = "1.11.0"
-julia = "1"
-
-[extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-
-[targets]
-test = ["Test"]
