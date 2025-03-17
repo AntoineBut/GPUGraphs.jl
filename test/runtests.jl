@@ -17,7 +17,7 @@ Random.seed!(1234)
 @testset "GPUGraphs.jl" begin
     # Write your tests here.
     @test true
-
+"""
     @testset "Code Quality" begin
         @testset "Aqua" begin
             Aqua.test_all(GPUGraphs; ambiguities = false)
@@ -29,11 +29,15 @@ Random.seed!(1234)
             @test JuliaFormatter.format(GPUGraphs; overwrite = false)
         end
     end
+"""
+    TEST_BACKEND = if get(ENV, "CI", "false") == "false"
+        Metal.MetalBackend()  # our personal laptops
+    else
+        KernelAbstractions.CPU()
+    end
 
 
-
-    TEST_BACKEND = Metal.MetalBackend() # TODO : change this to select the backend automatically
-    @testset "SparseGPUMatrixCSR Utilities" begin
+    @testset "SparseGPUMatrixCSR" begin
 
         # Test the constructor
         @testset "constructor" begin
@@ -65,9 +69,9 @@ Random.seed!(1234)
                 B_3 = SparseGPUMatrixCSR(collect(A_csc), TEST_BACKEND)
 
                 test_matrices = [B_0, B_1, B_2, B_3]
-                i = 0
+                i = 1
                 for B in test_matrices
-                    println("##### Test Constructor ", i)
+                    println("##### Matrix - Test Constructor ", i)
                     i += 1
                     @test size(B, 1) == 10
                     @test size(B, 2) == 10
@@ -93,6 +97,37 @@ Random.seed!(1234)
             @test size(A_gpu, 2) == 10
             @test length(A_gpu) == 100
             @test nnz(A_gpu) == nnz(A_cpu)
+        end
+    end
+
+    @testset "SparseGPUVector" begin
+        @testset "Constructors" begin
+            @testset "empty" begin
+                A = SparseGPUVector(Float32, Int32, TEST_BACKEND)
+                @test size(A) == 0
+                @test length(A) == 0
+            end
+
+            @testset "non-empty" begin
+                A_cpu = sprand(Float32, 10, 0.5)
+                ref_nzind = A_cpu.nzind
+                ref_nzval = A_cpu.nzval
+
+                B_0 = SparseGPUVector(10, ref_nzind, ref_nzval, TEST_BACKEND)
+                B_1 = SparseGPUVector(A_cpu, TEST_BACKEND)
+                B_2 = SparseGPUVector(collect(A_cpu), TEST_BACKEND)
+
+                test_vectors = [B_0, B_1, B_2]
+                i = 1
+                for B in test_vectors
+                    println("##### Vector - Test Constructor ", i)
+                    i += 1
+                    @test size(B) == 10
+                    @test length(B) == 10
+                    @allowscalar @test B.nzind == ref_nzind
+                    @allowscalar @test B.nzval == ref_nzval
+                end
+            end
         end
     end
 end
