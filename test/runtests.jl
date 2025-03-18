@@ -35,7 +35,8 @@ Random.seed!(1234)
         using Metal
         Metal.MetalBackend()  # our personal laptops
     else
-        KernelAbstractions.CPU()
+        Pkg.add("oneAPI")
+        oneAPI.oneAPIBackend()  # GitHub Actions
     end
 
 
