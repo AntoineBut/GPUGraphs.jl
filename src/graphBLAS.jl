@@ -15,7 +15,7 @@
     # Computes A*B and stores the result in C using the semiring semiring.
 	@private row = @index(Global)
     @print row
-    for i in a_row_ptr[row]:a_row_ptr[row+1]
+    for i in a_row_ptr[row]:a_row_ptr[row+1]-1
         c[row] += b[a_col_val[i]] * a_nz_val[i]
     end
 

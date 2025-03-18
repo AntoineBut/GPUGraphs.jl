@@ -6,8 +6,6 @@ using Graphs
 using SparseArrays
 using LinearAlgebra
 
-import AcceleratedKernels as AK
-
 export SparseGPUMatrixCSR,
     AbstractSparseGPUMatrix,
     SparseGPUVector,
