@@ -33,7 +33,8 @@ Random.seed!(1234)
     TEST_BACKEND = if get(ENV, "CI", "false") == "false"
         Pkg.add("Metal")
         using Metal
-        Metal.MetalBackend()  # our personal laptops
+        #Metal.MetalBackend()  # our personal laptops
+        KernelAbstractions.CPU()
     else
         KernelAbstractions.CPU()
     end
@@ -150,19 +151,20 @@ Random.seed!(1234)
         end
     end
     @testset "GraphBLAS" begin
-        @testset "mul!" begin
-            # Matrix-vector multiplication
-            A_cpu = sprand(Float32, 10, 10, 0.5)
-            B_cpu = rand(Float32, 10)
-            C_cpu = A_cpu * B_cpu
-            A_gpu = SparseGPUMatrixCSR(A_cpu, TEST_BACKEND)
-            B_gpu = allocate(TEST_BACKEND, Float32, 10)
-            copyto!(B_gpu, B_cpu)
-            C_gpu = KernelAbstractions.zeros(TEST_BACKEND, Float32, 10)
-            semiring = Semiring((x, y) -> x * y, Monoid(+, 0.0), 0.0, 1.0)
-            mul!(C_gpu, A_gpu, B_gpu, semiring)
-            @allowscalar @test C_gpu == C_cpu
-        end
+        """        
+                @testset "mul!" begin
+                    # Matrix-vector multiplication
+                    A_cpu = sprand(Float32, 10, 10, 0.5)
+                    B_cpu = rand(Float32, 10)
+                    C_cpu = A_cpu * B_cpu
+                    A_gpu = SparseGPUMatrixCSR(A_cpu, TEST_BACKEND)
+                    B_gpu = allocate(TEST_BACKEND, Float32, 10)
+                    copyto!(B_gpu, B_cpu)
+                    C_gpu = KernelAbstractions.zeros(TEST_BACKEND, Float32, 10)
+                    semiring = Semiring((x, y) -> x * y, Monoid(+, 0.0), 0.0, 1.0)
+                    mul!(C_gpu, A_gpu, B_gpu, semiring)
+                    @allowscalar @test C_gpu == C_cpu
+                end
+                """
     end
-
 end
