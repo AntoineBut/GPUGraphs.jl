@@ -31,5 +31,5 @@ function mul!(
     # Call the kernel
     backend = get_backend(C)
     kernel! = row_mul_kernel!(backend)
-    kernel!(C, A.rowptr, A.colval, A.nzval, B, semiring, ndrange = size(C))
+    kernel!(C, A.rowptr, A.colval, A.nzval, B, semiring, ndrange = size(C, 1))
 end
