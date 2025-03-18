@@ -8,7 +8,13 @@ using LinearAlgebra
 
 import AcceleratedKernels as AK
 
-export SparseGPUMatrixCSR, AbstractSparseGPUMatrix, SparseGPUVector, AbstractSparseGPUVector, Semiring, Monoid, mul!
+export SparseGPUMatrixCSR,
+    AbstractSparseGPUMatrix,
+    SparseGPUVector,
+    AbstractSparseGPUVector,
+    Semiring,
+    Monoid,
+    mul!
 
 
 include("algebra.jl")

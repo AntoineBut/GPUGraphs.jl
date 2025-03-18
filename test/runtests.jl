@@ -17,19 +17,19 @@ Random.seed!(1234)
 @testset "GPUGraphs.jl" begin
     # Write your tests here.
     @test true
-"""
-    @testset "Code Quality" begin
-        @testset "Aqua" begin
-            Aqua.test_all(GPUGraphs; ambiguities = false)
+    """
+        @testset "Code Quality" begin
+            @testset "Aqua" begin
+                Aqua.test_all(GPUGraphs; ambiguities = false)
+            end
+            @testset "JET" begin
+                JET.test_package(GPUGraphs; target_defined_modules = true)
+            end
+            @testset "JuliaFormatter" begin
+                @test JuliaFormatter.format(GPUGraphs; overwrite = false)
+            end
         end
-        @testset "JET" begin
-            JET.test_package(GPUGraphs; target_defined_modules = true)
-        end
-        @testset "JuliaFormatter" begin
-            @test JuliaFormatter.format(GPUGraphs; overwrite = false)
-        end
-    end
-"""
+    """
     TEST_BACKEND = if get(ENV, "CI", "false") == "false"
         Metal.MetalBackend()  # our personal laptops
     else
@@ -38,21 +38,32 @@ Random.seed!(1234)
 
 
     @testset "SparseGPUMatrixCSR" begin
-
         # Test the constructor
         @testset "constructor" begin
+            TEST_VECTOR_TYPE_VALS = typeof(allocate(TEST_BACKEND, Float32, 0))
+            TEST_VECTOR_TYPE_INDS = typeof(allocate(TEST_BACKEND, Int32, 0))
+            println("##### Test Vector Type: ", TEST_VECTOR_TYPE_VALS, " ", TEST_VECTOR_TYPE_INDS)
+            function test_vector_types(A::SparseGPUMatrixCSR, vals, inds)
+                @test typeof(A.rowptr) == inds
+                @test typeof(A.colval) == inds
+                @test typeof(A.nzval) == vals
+            end
             @testset "empty" begin
                 A = SparseGPUMatrixCSR(Float32, Int32, TEST_BACKEND)
                 @test size(A, 1) == 0
                 @test size(A, 2) == 0
                 @test length(A) == 0
+                @test nnz(A) == 0
+                test_vector_types(A, TEST_VECTOR_TYPE_VALS, TEST_VECTOR_TYPE_INDS)
             end
 
             @testset "non-empty" begin
                 A_csc = sprand(Float32, 10, 10, 0.5)
+                A_csc = convert(SparseMatrixCSC{Float32, Int32}, A_csc)
                 A_nnz = nnz(A_csc)
                 A_csr_t = sparse(transpose(A_csc))
                 ref_rowptr = A_csr_t.colptr
+                # Convert to int 32
                 ref_colval = A_csr_t.rowval
                 ref_nzval = A_csr_t.nzval
 
@@ -68,19 +79,20 @@ Random.seed!(1234)
                 B_2 = SparseGPUMatrixCSR(transpose(A_csr_t), TEST_BACKEND)
                 B_3 = SparseGPUMatrixCSR(collect(A_csc), TEST_BACKEND)
 
-                test_matrices = [B_0, B_1, B_2, B_3]
-                i = 1
-                for B in test_matrices
-                    println("##### Matrix - Test Constructor ", i)
-                    i += 1
-                    @test size(B, 1) == 10
-                    @test size(B, 2) == 10
-                    @test length(B) == 100
-                    @test nnz(B) == A_nnz
-                    @allowscalar @test B.rowptr == ref_rowptr
-                    @allowscalar @test B.colval == ref_colval
-                    @allowscalar @test B.nzval == ref_nzval
+                function test_constructor(A::SparseGPUMatrixCSR)
+                    @test size(A, 1) == 10
+                    @test size(A, 2) == 10
+                    @test length(A) == 100
+                    @test nnz(A) == A_nnz
+                    @allowscalar @test A.rowptr == ref_rowptr
+                    @allowscalar @test A.colval == ref_colval
+                    @allowscalar @test A.nzval == ref_nzval
+                    test_vector_types(A, TEST_VECTOR_TYPE_VALS, TEST_VECTOR_TYPE_INDS)
                 end
+                test_constructor(B_0)
+                test_constructor(B_1)
+                test_constructor(B_2)
+                test_constructor(B_3)
             end
 
         end
@@ -130,4 +142,20 @@ Random.seed!(1234)
             end
         end
     end
+    @testset "GraphBLAS" begin
+        @testset "mul!" begin
+            # Matrix-vector multiplication
+            A_cpu = sprand(Float32, 10, 10, 0.5)
+            B_cpu = rand(Float32, 10)
+            C_cpu = A_cpu * B_cpu
+            A_gpu = SparseGPUMatrixCSR(A_cpu, TEST_BACKEND)
+            B_gpu = allocate(TEST_BACKEND, Float32, 10)
+            copyto!(B_gpu, B_cpu)
+            C_gpu = KernelAbstractions.zeros(TEST_BACKEND, Float32, 10)
+            semiring = Semiring((x, y) -> x * y, Monoid(+, 0.0), 0.0, 1.0)
+            mul!(C_gpu, A_gpu, B_gpu, semiring)
+            @allowscalar @test C_gpu == C_cpu
+        end
+    end
+
 end
