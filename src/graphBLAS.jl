@@ -17,7 +17,7 @@ function mul!(
     A::SparseGPUMatrixCSR,
     B::AV,
     semiring::Semiring,
-) where {AV<:AbstractGPUVector}
+) where {AV<:AbstractVector}
     # Computes A*B and stores the result in C using the semiring semiring.
 
     # Check dimensions
