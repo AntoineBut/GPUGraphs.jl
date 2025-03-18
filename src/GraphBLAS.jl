@@ -13,12 +13,10 @@
     semiring::Semiring,
 )
     # Computes A*B and stores the result in C using the semiring semiring.
-
-	row = @index(Global)
+	@private row = @index(Global)
+    @private sum = 0.0
     for i in a_row_ptr[row]:a_row_ptr[row+1]
-        col = a_col_val[i]
-        value = a_nz_val[i]
-        sum += x[col] * value
+        sum += x[a_col_val[i]] * a_nz_val[i]
     end
     b[row] += sum
 
