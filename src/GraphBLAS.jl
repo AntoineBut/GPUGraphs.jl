@@ -14,11 +14,10 @@
 )
     # Computes A*B and stores the result in C using the semiring semiring.
 	@private row = @index(Global)
-    @private sum = 0.0
+    @print row
     for i in a_row_ptr[row]:a_row_ptr[row+1]
-        sum += x[a_col_val[i]] * a_nz_val[i]
+        c[row] += b[a_col_val[i]] * a_nz_val[i]
     end
-    b[row] += sum
 
 end
 
@@ -40,7 +39,7 @@ function mul!(
 
     # Call the kernel
     backend = get_backend(C)
-    kernel! = row_mul_kernel!(backend)
+    kernel! = row_mul_kernel!(backend, )
 	print(typeof(A.nzval))
     kernel!(C, A.rowptr, A.colval, A.nzval, B, semiring, ndrange=size(C))
 end

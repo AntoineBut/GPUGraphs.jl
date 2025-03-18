@@ -18,10 +18,8 @@ export SparseGPUMatrixCSR,
 
 
 include("algebra.jl")
-
 include("GPUGraphsMatrix.jl")
 include("GPUGraphsVector.jl")
-
 include("graphBLAS.jl")
 
 

@@ -154,7 +154,7 @@ Random.seed!(1234)
             C_gpu = KernelAbstractions.zeros(TEST_BACKEND, Float32, 10)
             semiring = Semiring((x, y) -> x * y, Monoid(+, 0.0), 0.0, 1.0)
             mul!(C_gpu, A_gpu, B_gpu, semiring)
-            #@allowscalar @test C_gpu == C_cpu
+            @allowscalar @test C_gpu == C_cpu
         end
     end
 
