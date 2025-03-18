@@ -4,10 +4,10 @@ using KernelAbstractions
 using GPUArrays
 using SparseArrays
 using Random
-using Metal
 using JuliaFormatter
 using Aqua
 using JET
+using Pkg
 
 # Test the SparseGPUMatrixCSR utilities
 
@@ -31,6 +31,8 @@ Random.seed!(1234)
     end
 
     TEST_BACKEND = if get(ENV, "CI", "false") == "false"
+        Pkg.add("Metal")
+        using Metal
         Metal.MetalBackend()  # our personal laptops
     else
         KernelAbstractions.CPU()

@@ -98,7 +98,7 @@ function SparseGPUMatrixCSR(m::Transpose{Tv,<:SparseMatrixCSC}, backend::Backend
     rowptr = m_t.colptr
     colval = m_t.rowval
     nzval = m_t.nzval
-    SparseGPUMatrixCSR(10, 10, rowptr, colval, nzval, backend)
+    SparseGPUMatrixCSR(size(m_t, 2), size(m_t, 1), rowptr, colval, nzval, backend)
 end
 
 function SparseGPUMatrixCSR(
