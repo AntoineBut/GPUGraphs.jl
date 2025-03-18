@@ -17,19 +17,19 @@ Random.seed!(1234)
 @testset "GPUGraphs.jl" begin
     # Write your tests here.
     @test true
-    """
-        @testset "Code Quality" begin
-            @testset "Aqua" begin
-                Aqua.test_all(GPUGraphs; ambiguities = false)
-            end
-            @testset "JET" begin
-                JET.test_package(GPUGraphs; target_defined_modules = true)
-            end
-            @testset "JuliaFormatter" begin
-                @test JuliaFormatter.format(GPUGraphs; overwrite = false)
-            end
+
+    @testset "Code Quality" begin
+        @testset "Aqua" begin
+            Aqua.test_all(GPUGraphs; ambiguities = false)
         end
-    """
+        @testset "JET" begin
+            JET.test_package(GPUGraphs; target_defined_modules = true)
+        end
+        @testset "JuliaFormatter" begin
+            @test JuliaFormatter.format(GPUGraphs; overwrite = false)
+        end
+    end
+
     TEST_BACKEND = if get(ENV, "CI", "false") == "false"
         Metal.MetalBackend()  # our personal laptops
     else
@@ -42,7 +42,12 @@ Random.seed!(1234)
         @testset "constructor" begin
             TEST_VECTOR_TYPE_VALS = typeof(allocate(TEST_BACKEND, Float32, 0))
             TEST_VECTOR_TYPE_INDS = typeof(allocate(TEST_BACKEND, Int32, 0))
-            println("##### Test Vector Type: ", TEST_VECTOR_TYPE_VALS, " ", TEST_VECTOR_TYPE_INDS)
+            println(
+                "##### Test Vector Type: ",
+                TEST_VECTOR_TYPE_VALS,
+                " ",
+                TEST_VECTOR_TYPE_INDS,
+            )
             function test_vector_types(A::SparseGPUMatrixCSR, vals, inds)
                 @test typeof(A.rowptr) == inds
                 @test typeof(A.colval) == inds
@@ -59,7 +64,7 @@ Random.seed!(1234)
 
             @testset "non-empty" begin
                 A_csc = sprand(Float32, 10, 10, 0.5)
-                A_csc = convert(SparseMatrixCSC{Float32, Int32}, A_csc)
+                A_csc = convert(SparseMatrixCSC{Float32,Int32}, A_csc)
                 A_nnz = nnz(A_csc)
                 A_csr_t = sparse(transpose(A_csc))
                 ref_rowptr = A_csr_t.colptr

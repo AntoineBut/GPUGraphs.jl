@@ -81,7 +81,14 @@ mutable struct SparseGPUMatrixCSR{
         else
             nzval_gpu = nzval
         end
-        new{Tv,Ti,typeof(nzval_gpu),typeof(rowptr_gpu), B}(m, n, rowptr_gpu, colval_gpu, nzval_gpu, backend)
+        new{Tv,Ti,typeof(nzval_gpu),typeof(rowptr_gpu),B}(
+            m,
+            n,
+            rowptr_gpu,
+            colval_gpu,
+            nzval_gpu,
+            backend,
+        )
     end
 end
 
@@ -91,11 +98,15 @@ function SparseGPUMatrixCSR(m::Transpose{Tv,<:SparseMatrixCSC}, backend::Backend
     rowptr = m_t.colptr
     colval = m_t.rowval
     nzval = m_t.nzval
-    SparseGPUMatrixCSR(size(m, 1), size(m, 2), rowptr, colval, nzval, backend)
+    SparseGPUMatrixCSR(10, 10, rowptr, colval, nzval, backend)
 end
 
-function SparseGPUMatrixCSR(m::Matrix{Tv}, backend::Backend, ::Type{Ti}=Int32) where {Tv, Ti<:Integer}
-    sparse_matrix_csc_t = transpose(convert(SparseMatrixCSC{Tv, Ti}, sparse(transpose(m)))) # Transpose to get the CSR format. TODO : make more efficient 
+function SparseGPUMatrixCSR(
+    m::Matrix{Tv},
+    backend::Backend,
+    ::Type{Ti} = Int32,
+) where {Tv,Ti<:Integer}
+    sparse_matrix_csc_t = transpose(convert(SparseMatrixCSC{Tv,Ti}, sparse(transpose(m)))) # Transpose to get the CSR format. TODO : make more efficient 
     SparseGPUMatrixCSR(sparse_matrix_csc_t, backend)
 end
 
