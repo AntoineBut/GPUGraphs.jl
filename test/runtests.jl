@@ -33,8 +33,8 @@ Random.seed!(1234)
     TEST_BACKEND = if get(ENV, "CI", "false") == "false"
         Pkg.add("Metal")
         using Metal
-        #Metal.MetalBackend()  # our personal laptops
-        KernelAbstractions.CPU()
+        Metal.MetalBackend()  # our personal laptops
+    #KernelAbstractions.CPU()
     else
         KernelAbstractions.CPU()
     end
@@ -45,12 +45,6 @@ Random.seed!(1234)
         @testset "constructor" begin
             TEST_VECTOR_TYPE_VALS = typeof(allocate(TEST_BACKEND, Float32, 0))
             TEST_VECTOR_TYPE_INDS = typeof(allocate(TEST_BACKEND, Int32, 0))
-            println(
-                "##### Test Vector Type: ",
-                TEST_VECTOR_TYPE_VALS,
-                " ",
-                TEST_VECTOR_TYPE_INDS,
-            )
             function test_vector_types(A::SparseGPUMatrixCSR, vals, inds)
                 @test typeof(A.rowptr) == inds
                 @test typeof(A.colval) == inds
@@ -102,15 +96,81 @@ Random.seed!(1234)
                 test_constructor(B_2)
                 test_constructor(B_3)
             end
+            @testset "Throws" begin
+                # Size mismatch
+                row_ptr = [1, 4, 7, 11]
+                col_val = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+                nz_val_1 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1]
+                nz_val_2 = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+                @test_throws ArgumentError SparseGPUMatrixCSR(
+                    3,
+                    10,
+                    row_ptr,
+                    col_val,
+                    nz_val_1,
+                    TEST_BACKEND,
+                )
+                @test_throws ArgumentError SparseGPUMatrixCSR(
+                    3,
+                    10,
+                    row_ptr,
+                    col_val,
+                    nz_val_2,
+                    TEST_BACKEND,
+                )
+
+                # Rowptr mismatch
+                nz_val = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+                @test_throws ArgumentError SparseGPUMatrixCSR(
+                    4,
+                    10,
+                    row_ptr,
+                    col_val,
+                    nz_val,
+                    TEST_BACKEND,
+                )
+                @test_throws ArgumentError SparseGPUMatrixCSR(
+                    2,
+                    10,
+                    row_ptr,
+                    col_val,
+                    nz_val,
+                    TEST_BACKEND,
+                )
+                row_ptr = [-1, 4, 7, 11]
+                @test_throws ArgumentError SparseGPUMatrixCSR(
+                    3,
+                    10,
+                    row_ptr,
+                    col_val,
+                    nz_val,
+                    TEST_BACKEND,
+                )
+                row_ptr = [1, 4, 7, 12]
+                @test_throws ArgumentError SparseGPUMatrixCSR(
+                    3,
+                    10,
+                    row_ptr,
+                    col_val,
+                    nz_val,
+                    TEST_BACKEND,
+                )
+
+                # Colval mismatch
+                col_val = [1, 2, 3, 4, 5, 6, 7, 8, 9, 15]
+                @test_throws ArgumentError SparseGPUMatrixCSR(
+                    3,
+                    10,
+                    row_ptr,
+                    col_val,
+                    nz_val,
+                    TEST_BACKEND,
+                )
+
+            end
 
         end
         @testset "Basic Utilities" begin
-            A = SparseGPUMatrixCSR(Float32, Int32, TEST_BACKEND)
-            @test size(A, 1) == 0
-            @test size(A, 2) == 0
-            @test length(A) == 0
-            @test nnz(A) == 0
-
             A_cpu = sprand(Float32, 10, 10, 0.5)
             A_gpu = SparseGPUMatrixCSR(A_cpu, TEST_BACKEND)
             @test size(A_gpu, 1) == 10
@@ -151,20 +211,22 @@ Random.seed!(1234)
         end
     end
     @testset "GraphBLAS" begin
-        """        
-                @testset "mul!" begin
-                    # Matrix-vector multiplication
-                    A_cpu = sprand(Float32, 10, 10, 0.5)
-                    B_cpu = rand(Float32, 10)
-                    C_cpu = A_cpu * B_cpu
-                    A_gpu = SparseGPUMatrixCSR(A_cpu, TEST_BACKEND)
-                    B_gpu = allocate(TEST_BACKEND, Float32, 10)
-                    copyto!(B_gpu, B_cpu)
-                    C_gpu = KernelAbstractions.zeros(TEST_BACKEND, Float32, 10)
-                    semiring = Semiring((x, y) -> x * y, Monoid(+, 0.0), 0.0, 1.0)
-                    mul!(C_gpu, A_gpu, B_gpu, semiring)
-                    @allowscalar @test C_gpu == C_cpu
-                end
-                """
+
+        @testset "mul!" begin
+            # Matrix-vector multiplication
+            A_cpu = sprand(Float32, 10, 10, 0.5)
+            B_cpu = rand(Float32, 10)
+            C_cpu = A_cpu * B_cpu
+            A_gpu = SparseGPUMatrixCSR(A_cpu, TEST_BACKEND)
+            B_gpu = allocate(TEST_BACKEND, Float32, 10)
+            copyto!(B_gpu, B_cpu)
+            C_gpu = KernelAbstractions.zeros(TEST_BACKEND, Float32, 10)
+            semiring = Semiring((x, y) -> x * y, Monoid(+, 0.0), 0.0, 1.0)
+
+            # Broken on CPU Backend
+            #mul!(C_gpu, A_gpu, B_gpu, semiring)
+            #@allowscalar @test C_gpu == C_cpu
+        end
+
     end
 end

@@ -61,12 +61,22 @@ mutable struct SparseGPUMatrixCSR{
         if length(colval) != length(nzval)
             throw(ArgumentError("length(colval) must be equal to length(nzval)"))
         end
+        if !isempty(colval) && (maximum(colval) > n || minimum(colval) < 1)
+            throw(ArgumentError("colval contains an index out of bounds"))
+        end
+        if @allowscalar rowptr[1] != 1 || @allowscalar rowptr[m+1] != length(colval) + 1
+            print(rowptr)
+            throw(
+                ArgumentError(
+                    "rowptr[1] must be equal to 1 and rowptr[m+1] must be equal to length(colval) + 1",
+                ),
+            )
+        end
         if get_backend(rowptr) != backend
             rowptr_gpu = allocate(backend, Ti, length(rowptr))
             copyto!(rowptr_gpu, rowptr)
         else
             rowptr_gpu = rowptr
-
         end
 
         if get_backend(colval) != backend
@@ -127,6 +137,7 @@ function SparseGPUMatrixCSR(
     backend::Backend,
 ) where {Tv,Ti}
     rowptr = allocate(backend, Ti, m + 1)
+    rowptr .= 1
     colval = allocate(backend, Ti, 0)
     nzval = allocate(backend, Tv, 0)
     SparseGPUMatrixCSR(m, n, rowptr, colval, nzval, backend)
