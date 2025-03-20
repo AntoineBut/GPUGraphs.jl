@@ -200,7 +200,6 @@ Random.seed!(1234)
                 test_vectors = [B_0, B_1, B_2]
                 i = 1
                 for B in test_vectors
-                    println("##### Vector - Test Constructor ", i)
                     i += 1
                     @test size(B) == 10
                     @test length(B) == 10
@@ -224,7 +223,7 @@ Random.seed!(1234)
             semiring = Semiring((x, y) -> x * y, Monoid(+, 0.0), 0.0, 1.0)
 
             # Broken on CPU Backend
-            #mul!(C_gpu, A_gpu, B_gpu, semiring)
+            #GPU_spmul!(C_gpu, A_gpu, B_gpu, semiring)
             #@allowscalar @test C_gpu == C_cpu
         end
 

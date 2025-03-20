@@ -1,4 +1,10 @@
 [deps]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+GPUArrays = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
 GPUGraphs = "fd5a6e86-c761-4989-bab7-5b3464417f6b"
+KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
 Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+SuiteSparse = "4607b0f0-06f3-5cda-b6b1-a6196a1729e9"
+SuiteSparseGraphBLAS = "c2e53296-7b14-11e9-1210-bddfa8111e1d"
