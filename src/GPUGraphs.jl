@@ -4,6 +4,7 @@ using KernelAbstractions
 using GPUArrays
 using Graphs
 using SparseArrays
+import SparseArrays: sprand
 using LinearAlgebra
 
 export SparseGPUMatrixCSR,
@@ -13,7 +14,6 @@ export SparseGPUMatrixCSR,
     Semiring,
     Monoid,
     GPU_spmul!
-
 
 include("algebra.jl")
 include("GPUGraphsMatrix.jl")

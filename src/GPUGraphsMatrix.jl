@@ -65,7 +65,6 @@ mutable struct SparseGPUMatrixCSR{
             throw(ArgumentError("colval contains an index out of bounds"))
         end
         if @allowscalar rowptr[1] != 1 || @allowscalar rowptr[m+1] != length(colval) + 1
-            print(rowptr)
             throw(
                 ArgumentError(
                     "rowptr[1] must be equal to 1 and rowptr[m+1] must be equal to length(colval) + 1",
@@ -80,10 +79,15 @@ mutable struct SparseGPUMatrixCSR{
         end
 
         if get_backend(colval) != backend
+            print("Copying colval\n")
             colval_gpu = allocate(backend, Ti, length(colval))
+            println(eltype(colval), "--", eltype(colval_gpu), "--", Ti)
             copyto!(colval_gpu, colval)
+            synchronize(backend)
+            @allowscalar println(colval[end-10:end], "\n", colval_gpu[end-10:end])
         else
             colval_gpu = colval
+
         end
         if get_backend(nzval) != backend
             nzval_gpu = allocate(backend, Tv, length(nzval))
@@ -150,8 +154,16 @@ end
 Base.size(A::SparseGPUMatrixCSR) = (A.m, A.n)
 Base.size(A::SparseGPUMatrixCSR, i::Int) = (i == 1) ? A.m : A.n
 Base.length(A::SparseGPUMatrixCSR) = A.m * A.n
+Base.show(io::IO, A::SparseGPUMatrixCSR) = print(
+    io,
+    "SparseGPUMatrixCSR{$(eltype(A.nzval))}($(size(A, 1)), $(size(A, 2))) - $(nnz(A)) explicit elements",
+)
+Base.display(A::SparseGPUMatrixCSR) = show(stdout, A)
+
+
+
 function Base.getindex(A::SparseGPUMatrixCSR, i::Int, j::Int)
-    @warn "Scalar indexing on a SparseGPUMatrixCSR is slow. For better performance, vectorize the operation."
+    #@warn "Scalar indexing on a SparseGPUMatrixCSR is slow. For better performance, vectorize the operation."
     if i < 1 || i > A.m || j < 1 || j > A.n
         throw(BoundsError(A, (i, j)))
     end
@@ -182,6 +194,8 @@ end
 # SparseArrays functions
 # Function to get the number of nonzeros in the matrix
 SparseArrays.nnz(A::SparseGPUMatrixCSR) = length(A.nzval)
+SparseArrays.sprand(::Type{Tv}, m::Int, n::Int, p::Real, backend::Backend) where {Tv} =
+    SparseGPUMatrixCSR(transpose(SparseArrays.sprand(Tv, m, n, p)), backend)
 
 # KA functions
 KernelAbstractions.get_backend(A::SparseGPUMatrixCSR) = A.backend

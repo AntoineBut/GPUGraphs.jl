@@ -223,8 +223,34 @@ Random.seed!(1234)
             semiring = Semiring((x, y) -> x * y, Monoid(+, 0.0), 0.0, 1.0)
 
             # Broken on CPU Backend
-            #GPU_spmul!(C_gpu, A_gpu, B_gpu, semiring)
+            GPU_spmul!(C_gpu, A_gpu, B_gpu, semiring)
+            @allowscalar @test C_gpu == C_cpu
+
+            # Large matrix
+            LARGE_NB = 1000
+            A_cpu = sprand(Float32, LARGE_NB, LARGE_NB, 0.2)
+            B_cpu = rand(Float32, LARGE_NB)
+            C_cpu = A_cpu * B_cpu
+            A_gpu = SparseGPUMatrixCSR(A_cpu, TEST_BACKEND)
+            B_gpu = allocate(TEST_BACKEND, Float32, LARGE_NB)
+            copyto!(B_gpu, B_cpu)
+            C_gpu = KernelAbstractions.zeros(TEST_BACKEND, Float32, LARGE_NB)
+            semiring = Semiring((x, y) -> x * y, Monoid(+, 0.0), 0.0, 1.0)
+
+            GPU_spmul!(C_gpu, A_gpu, B_gpu, semiring)
+            KernelAbstractions.synchronize(TEST_BACKEND)
+
             #@allowscalar @test C_gpu == C_cpu
+            # Count the number of differences
+            diff = 0
+            for i = 1:LARGE_NB
+                if @allowscalar abs(C_gpu[i] - C_cpu[i]) > 1e-6
+                    diff += 1
+                end
+            end
+            @test diff <= 0
+            println("Number of differences: $diff out of $LARGE_NB")
+
         end
 
     end

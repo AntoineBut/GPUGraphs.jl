@@ -32,5 +32,4 @@ function GPU_spmul!(
     backend = get_backend(C)
     kernel! = row_mul_kernel!(backend)
     kernel!(C, A.rowptr, A.colval, A.nzval, B, semiring; ndrange = size(A, 1))
-    synchronize(backend)
 end
