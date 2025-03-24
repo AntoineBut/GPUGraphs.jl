@@ -18,6 +18,7 @@ p = @df df plot(
     title = "Sparse Matrix-Vector Multiplication",
     legend = :topleft,
     yscale = :log10,
+    xscale = :log10,
     yticks = [10^i for i = -6.0:0.0],
     ylim = (1e-5, 1e+0),
 

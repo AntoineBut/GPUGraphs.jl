@@ -17,7 +17,7 @@ n_cpu_threads = Sys.CPU_THREADS
 gbset(:nthreads, n_cpu_threads)
 
 #SIZES = [1024 * 2^i for i = 2:6]
-SIZES = [1024, 8192, 16384, 32768, 49152, 65536]
+SIZES = [1024, 4096, 8192, 12000, 16384, 25000, 32768, 49152]
 FILL = 0.2
 MUL_RESULTS =
     DataFrame(operation = String[], size = Int[], implementation = String[], time = Real[])
