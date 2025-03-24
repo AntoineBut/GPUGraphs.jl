@@ -13,7 +13,8 @@ export SparseGPUMatrixCSR,
     AbstractSparseGPUVector,
     Semiring,
     Monoid,
-    GPU_spmul!
+    GPU_spmul!,
+    sprand_gpu
 
 include("algebra.jl")
 include("GPUGraphsMatrix.jl")

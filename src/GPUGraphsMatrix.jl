@@ -79,12 +79,8 @@ mutable struct SparseGPUMatrixCSR{
         end
 
         if get_backend(colval) != backend
-            print("Copying colval\n")
             colval_gpu = allocate(backend, Ti, length(colval))
-            println(eltype(colval), "--", eltype(colval_gpu), "--", Ti)
             copyto!(colval_gpu, colval)
-            synchronize(backend)
-            @allowscalar println(colval[end-10:end], "\n", colval_gpu[end-10:end])
         else
             colval_gpu = colval
 
@@ -194,7 +190,7 @@ end
 # SparseArrays functions
 # Function to get the number of nonzeros in the matrix
 SparseArrays.nnz(A::SparseGPUMatrixCSR) = length(A.nzval)
-SparseArrays.sprand(::Type{Tv}, m::Int, n::Int, p::Real, backend::Backend) where {Tv} =
+sprand_gpu(::Type{Tv}, m::Int, n::Int, p::Real, backend::Backend) where {Tv} =
     SparseGPUMatrixCSR(transpose(SparseArrays.sprand(Tv, m, n, p)), backend)
 
 # KA functions
