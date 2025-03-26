@@ -56,6 +56,7 @@ Random.seed!(1234)
                 @test size(A, 2) == 0
                 @test length(A) == 0
                 @test nnz(A) == 0
+                @test size(A) == (0, 0)
                 test_vector_types(A, TEST_VECTOR_TYPE_VALS, TEST_VECTOR_TYPE_INDS)
             end
 
@@ -84,17 +85,33 @@ Random.seed!(1234)
                 function test_constructor(A::SparseGPUMatrixCSR)
                     @test size(A, 1) == 10
                     @test size(A, 2) == 10
+                    @test size(A) == (10, 10)
                     @test length(A) == 100
                     @test nnz(A) == A_nnz
+                    @test get_backend(A) == TEST_BACKEND
                     @allowscalar @test A.rowptr == ref_rowptr
                     @allowscalar @test A.colval == ref_colval
                     @allowscalar @test A.nzval == ref_nzval
                     test_vector_types(A, TEST_VECTOR_TYPE_VALS, TEST_VECTOR_TYPE_INDS)
+                    all_equal = true
+                    for i = 1:10
+                        for j = 1:10
+                            all_equal = all_equal && A[i, j] == A_csc[i, j]
+                        end
+                    end
+                    @test all_equal
                 end
                 test_constructor(B_0)
                 test_constructor(B_1)
                 test_constructor(B_2)
                 test_constructor(B_3)
+
+                A_rand = sprand_gpu(Float32, 10, 10, 0.5, TEST_BACKEND)
+                @test size(A_rand, 1) == 10
+                @test size(A_rand, 2) == 10
+                @test size(A_rand) == (10, 10)
+                @test length(A_rand) == 100
+
             end
             @testset "Throws" begin
                 # Size mismatch
@@ -175,6 +192,7 @@ Random.seed!(1234)
             A_gpu = SparseGPUMatrixCSR(A_cpu, TEST_BACKEND)
             @test size(A_gpu, 1) == 10
             @test size(A_gpu, 2) == 10
+            @test size(A_gpu) == (10, 10)
             @test length(A_gpu) == 100
             @test nnz(A_gpu) == nnz(A_cpu)
         end

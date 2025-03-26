@@ -6,7 +6,7 @@
 abstract type AbstractSparseGPUMatrix{Tv,Ti<:Integer} <:
               SparseArrays.AbstractSparseMatrix{Tv,Ti} end
 """
-    SparseGPUMatrixCSR{Tv,Ti<:Integer} <: AbstractSparseMatrixCSC{Tv,Ti}
+    SparseGPUMatrixCSR{Tv,Ti<:Integer} <: SparseArrays.AbstractSparseMatrix{Tv,Ti}
     Tv : Type of the stored values
     Ti : Type of the stored indices
     A sparse matrix in Compressed Sparse Row format for GPU graph processing.
@@ -17,21 +17,18 @@ abstract type AbstractSparseGPUMatrix{Tv,Ti<:Integer} <:
     - `rowptr::AbstractGPUVector{Ti}` : Row i is in rowptr[i]:(rowptr[i+1]-1)
     - `colval::AbstractGPUVector{Ti}` : Col indices of stored values
     - `nzval::AbstractGPUVector{Tv}` : Stored values, typically nonzeros
-    - `backend::Backend` : Backend, e.g. CPU or GPU
 """
 mutable struct SparseGPUMatrixCSR{
     Tv,
     Ti<:Integer,
     Gv<:AbstractVector{Tv}, # Cannot put AbstractGPUVector here because KA's CPU backend uses Vector, 
     Gi<:AbstractVector{Ti}, # and we want to be able to use the CPU backend for testing
-    B<:KernelAbstractions.Backend,
 } <: AbstractSparseGPUMatrix{Tv,Ti}
     m::Int
     n::Int
     rowptr::Gi
     colval::Gi
     nzval::Gv
-    backend::B
     """
         Constructors for a SparseGPUMatrixCSR
         SparseGPUMatrixCSR(m::Int, n::Int, rowptr::AbstractGPUVector{Ti}, colval::AbstractGPUVector{Ti}, nzval::AbstractGPUVector{Tv}, backend::Backend)
@@ -91,13 +88,12 @@ mutable struct SparseGPUMatrixCSR{
         else
             nzval_gpu = nzval
         end
-        new{Tv,Ti,typeof(nzval_gpu),typeof(rowptr_gpu),B}(
+        new{Tv,Ti,typeof(nzval_gpu),typeof(rowptr_gpu)}(
             m,
             n,
             rowptr_gpu,
             colval_gpu,
             nzval_gpu,
-            backend,
         )
     end
 end
@@ -194,4 +190,4 @@ sprand_gpu(::Type{Tv}, m::Int, n::Int, p::Real, backend::Backend) where {Tv} =
     SparseGPUMatrixCSR(transpose(SparseArrays.sprand(Tv, m, n, p)), backend)
 
 # KA functions
-KernelAbstractions.get_backend(A::SparseGPUMatrixCSR) = A.backend
+KernelAbstractions.get_backend(A::SparseGPUMatrixCSR) = get_backend(A.nzval)
