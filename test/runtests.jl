@@ -33,7 +33,7 @@ Random.seed!(1234)
     TEST_BACKEND = if get(ENV, "CI", "false") == "false"
         Pkg.add("Metal")
         using Metal
-        Metal.MetalBackend()  # our personal laptops
+        KernelAbstractions.CPU()  # our personal laptops
     #KernelAbstractions.CPU()
     else
         KernelAbstractions.CPU()
@@ -220,10 +220,9 @@ Random.seed!(1234)
             B_gpu = allocate(TEST_BACKEND, Float32, 10)
             copyto!(B_gpu, B_cpu)
             C_gpu = KernelAbstractions.zeros(TEST_BACKEND, Float32, 10)
-            semiring = Semiring((x, y) -> x * y, Monoid(+, 0.0), 0.0, 1.0)
+            #semiring = Semiring(*, Monoid(+, 0.0), 0.0, 1.0)
 
-            # Broken on CPU Backend
-            GPU_spmul!(C_gpu, A_gpu, B_gpu, semiring)
+            GPU_spmul!(C_gpu, A_gpu, B_gpu)
             @allowscalar @test C_gpu == C_cpu
 
             # Large matrix
@@ -235,9 +234,9 @@ Random.seed!(1234)
             B_gpu = allocate(TEST_BACKEND, Float32, LARGE_NB)
             copyto!(B_gpu, B_cpu)
             C_gpu = KernelAbstractions.zeros(TEST_BACKEND, Float32, LARGE_NB)
-            semiring = Semiring((x, y) -> x * y, Monoid(+, 0.0), 0.0, 1.0)
+            #semiring = Semiring((x, y) -> x * y, Monoid(+, 0.0), 0.0, 1.0)
 
-            GPU_spmul!(C_gpu, A_gpu, B_gpu, semiring)
+            GPU_spmul!(C_gpu, A_gpu, B_gpu)
             KernelAbstractions.synchronize(TEST_BACKEND)
 
             #@allowscalar @test C_gpu == C_cpu

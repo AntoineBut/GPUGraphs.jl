@@ -11,8 +11,6 @@ export SparseGPUMatrixCSR,
     AbstractSparseGPUMatrix,
     SparseGPUVector,
     AbstractSparseGPUVector,
-    Semiring,
-    Monoid,
     GPU_spmul!,
     sprand_gpu
 

@@ -2,12 +2,14 @@
 
 # Priority : efficient elementwise operations using mapreduce, Matrix-Vector products, Matrix-Matrix products with GraphBLAS semirings
 
-@kernel function row_mul_kernel!(c, a_row_ptr, a_col_val, a_nz_val, b, semiring::Semiring)
+@kernel function row_mul_kernel!(c, a_row_ptr, a_col_val, a_nz_val, b)
     # Computes A*B and stores the result in C using the semiring semiring.
-    @private row = @index(Global, Linear)
+    row = @index(Global, Linear)
+    acc = zero(eltype(c))
     for i = a_row_ptr[row]:a_row_ptr[row+1]-1
-        c[row] += b[a_col_val[i]] * a_nz_val[i]
+        acc += b[a_col_val[i]] * a_nz_val[i]
     end
+    c[row] = acc
 
 end
 
@@ -15,7 +17,7 @@ function GPU_spmul!(
     C::AV,
     A::SparseGPUMatrixCSR,
     B::AV,
-    semiring::Semiring,
+    #semiring::Semiring,
 ) where {AV<:AbstractVector}
     # Computes A*B and stores the result in C using the semiring semiring.
 
@@ -31,5 +33,5 @@ function GPU_spmul!(
     #println("Calling kernel")
     backend = get_backend(C)
     kernel! = row_mul_kernel!(backend)
-    kernel!(C, A.rowptr, A.colval, A.nzval, B, semiring; ndrange = size(A, 1))
+    kernel!(C, A.rowptr, A.colval, A.nzval, B; ndrange = size(A, 1))
 end

@@ -16,13 +16,14 @@ BACKEND = Metal.MetalBackend()  # our personal laptops
 n_cpu_threads = Sys.CPU_THREADS
 gbset(:nthreads, n_cpu_threads)
 
-#SIZES = [1024 * 2^i for i = 2:6]
-SIZES = [1024, 4096, 8192, 12000, 16384, 25000, 32768, 49152]
-FILL = 0.2
+SIZES = [16384 * 2^i for i = 1:8]
+NNZ = SIZES .* 10
+NB_ELEMS = 10 # Average number of non-zero elements per column
 MUL_RESULTS =
     DataFrame(operation = String[], size = Int[], implementation = String[], time = Real[])
 
 for SIZE in SIZES
+    FILL = NB_ELEMS / SIZE
     print("Generating random sparse matrix of size $SIZE x $SIZE with fill $FILL\n")
     A_csc_cpu = sprand(Float32, SIZE, SIZE, FILL)
     A_csr_cpu = transpose(A_csc_cpu)
@@ -35,21 +36,29 @@ for SIZE in SIZES
     b_ssGB = b
     b_gpu = MtlVector(b)
 
-    semiring = Semiring((x, y) -> x * y, Monoid(+, 0.0), 0.0, 1.0)
+    semiring = Semiring(*, +, zero(Int32), one(Int32))
 
     SUITE["mul!"]["CPU"]["SparseArrays-CSR"] = @benchmarkable begin
-        mul!(res, $A_csr_cpu, $b)
+        for i = 1:10
+            mul!(res, $A_csr_cpu, $b)
+        end
     end evals = 1 setup = (res = zeros(Float32, $SIZE))
 
     SUITE["mul!"]["CPU"]["SparseArrays-CSC"] = @benchmarkable begin
-        mul!(res, $A_csc_cpu, $b)
+        for i = 1:10
+            mul!(res, $A_csc_cpu, $b)
+        end
     end evals = 1 setup = (res = zeros(Float32, $SIZE))
     SUITE["mul!"]["CPU"]["SuiteSparseGraphBLAS"] = @benchmarkable begin
-        mul!(res_ssGB, $A_ssGB, $b_ssGB)
+        for i = 1:10
+            mul!(res_ssGB, $A_ssGB, $b_ssGB)
+        end
     end evals = 1 setup = (res_ssGB = GBVector(zeros(Float32, $SIZE)))
 
     SUITE["mul!"]["GPU"]["GPUGraphs"] = @benchmarkable begin
-        GPU_spmul!(res_gpu, $A_csr_gpu, $b_gpu, $semiring)
+        for i = 1:10
+            GPU_spmul!(res_gpu, $A_csr_gpu, $b_gpu, $semiring)
+        end
         KernelAbstractions.synchronize(BACKEND)
     end evals = 1 setup = (res_gpu = allocate(BACKEND, Float32, $SIZE))
 

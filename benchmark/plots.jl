@@ -49,3 +49,6 @@ speedup_plot = plot(
     markershape = [:utriangle :x :circle :square],
 )
 display(speedup_plot)
+# Save the plots
+savefig(p, "benchmark/out/spmv_results.png")
+savefig(speedup_plot, "benchmark/out/spmv_speedup.png")

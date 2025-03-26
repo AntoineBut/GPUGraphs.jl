@@ -1,17 +1,15 @@
 using Metal, KernelAbstractions
 
-LIMIT = 2^32
-ELTYPE = Int8
-backend = Metal.MetalBackend()
+backend = KernelAbstractions.CPU()
 
-cpu = rand(ELTYPE, LIMIT - 1);
-gpu = allocate(backend, eltype(cpu), length(cpu));
-copyto!(gpu, cpu);
-cpu_2 = collect(gpu);
-println(cpu == cpu_2);
+@kernel function test_kernel!(A)
+    row = @index(Global, Linear)
+    A[row] = row
+end
 
-cpu = rand(ELTYPE, LIMIT);
-gpu = allocate(backend, eltype(cpu), length(cpu));
-copyto!(gpu, cpu);
-cpu_2 = collect(gpu);
-println(cpu == cpu_2);
+function call_test_kernel()
+    A = allocate(backend, Float32, 10)
+    kernel! = test_kernel!(backend)
+    kernel!(A; ndrange = size(A, 1))
+    return A
+end
