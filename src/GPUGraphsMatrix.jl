@@ -99,7 +99,10 @@ mutable struct SparseGPUMatrixCSR{
 end
 
 
-function SparseGPUMatrixCSR(m::Transpose{Tv,<:SparseMatrixCSC}, backend::Backend) where {Tv}
+function SparseGPUMatrixCSR(
+    m::Transpose{Tv,<:SparseMatrixCSC{Tv,Ti}},
+    backend::Backend,
+) where {Tv,Ti<:Integer}
     m_t = m.parent
     rowptr = m_t.colptr
     colval = m_t.rowval
@@ -191,3 +194,183 @@ sprand_gpu(::Type{Tv}, m::Int, n::Int, p::Real, backend::Backend) where {Tv} =
 
 # KA functions
 KernelAbstractions.get_backend(A::SparseGPUMatrixCSR) = get_backend(A.nzval)
+
+### Padded CSR Matrix 
+
+
+mutable struct SparseGPUMatrixELL{
+    Tv,
+    Ti<:Integer,
+    Gv<:AbstractVector{Tv}, # Cannot put AbstractGPUVector here because KA's CPU backend uses Vector, 
+    Gi<:AbstractVector{Ti}, # and we want to be able to use the CPU backend for testing
+} <: AbstractSparseGPUMatrix{Tv,Ti}
+    m::Int
+    n::Int
+    nnz_per_row::Gi
+    colval::Gi
+    nzval::Gv
+    """
+        Constructors for a SparseGPUMatrixELL
+        SparseGPUMatrixELL(m::Int, n::Int, nnz_per_row::AbstractGPUVector{Ti}, colval::AbstractGPUVector{Ti}, nzval::AbstractGPUVector{Tv}, backend::Backend)
+    """
+    function SparseGPUMatrixELL(
+        m::Int,
+        n::Int,
+        nnz_per_row::Gi,
+        colval::Gi,
+        nzval::Gv,
+        backend::B,
+    ) where {
+        Tv,
+        Ti,
+        Gv<:AbstractVector{Tv},
+        Gi<:AbstractVector{Ti},
+        B<:KernelAbstractions.Backend,
+    }
+        if length(nnz_per_row) != m
+            throw(ArgumentError("length(nnz_per_row) must be equal to m"))
+        end
+        if length(colval) != length(nzval)
+            throw(ArgumentError("length(colval) must be equal to length(nzval)"))
+        end
+        if !isempty(colval) && (maximum(colval) > n || minimum(colval) < 0)
+            throw(ArgumentError("colval contains an index out of bounds"))
+        end
+
+        if get_backend(nnz_per_row) != backend
+            nnz_per_row_gpu = allocate(backend, Ti, length(nnz_per_row))
+            copyto!(nnz_per_row_gpu, nnz_per_row)
+        else
+            nnz_per_row_gpu = nnz_per_row
+        end
+
+        if get_backend(colval) != backend
+            colval_gpu = allocate(backend, Ti, length(colval))
+            copyto!(colval_gpu, colval)
+        else
+            colval_gpu = colval
+
+        end
+        if get_backend(nzval) != backend
+            nzval_gpu = allocate(backend, Tv, length(nzval))
+            copyto!(nzval_gpu, nzval)
+        else
+            nzval_gpu = nzval
+        end
+        new{Tv,Ti,typeof(nzval_gpu),typeof(nnz_per_row_gpu)}(
+            m,
+            n,
+            nnz_per_row_gpu,
+            colval_gpu,
+            nzval_gpu,
+        )
+    end
+end
+
+function SparseGPUMatrixELL(
+    m::Matrix{Tv},
+    backend::Backend,
+    ::Type{Ti} = Int32,
+) where {Tv,Ti<:Integer}
+    sparse_matrix_csc = convert(SparseMatrixCSC{Tv,Ti}, sparse(m))
+    SparseGPUMatrixELL(sparse_matrix_csc, backend)
+end
+
+function SparseGPUMatrixELL(
+    m::Transpose{Tv,<:SparseMatrixCSC{Tv,Ti}},
+    backend::Backend,
+) where {Tv,Ti<:Integer}
+    m_t = m.parent
+    rowptr = m_t.colptr
+    colval = m_t.rowval
+    nzval = m_t.nzval
+    nnz_per_row = diff(rowptr)
+    max_nnz = maximum(nnz_per_row)
+
+    colval_padded = zeros(Ti, length(nnz_per_row) * max_nnz)
+    nzval_padded = zeros(Tv, length(nnz_per_row) * max_nnz)
+
+    for i = 1:length(nnz_per_row)
+        row_start = rowptr[i]
+        row_end = rowptr[i+1]
+        row_nnz = row_end - row_start
+        colval_padded[(i-1)*max_nnz+1:i*max_nnz] =
+            [colval[row_start:row_end-1]; zeros(Ti, max_nnz - row_nnz)]
+        nzval_padded[(i-1)*max_nnz+1:i*max_nnz] =
+            [nzval[row_start:row_end-1]; zeros(Tv, max_nnz - row_nnz)]
+    end
+
+    SparseGPUMatrixELL(
+        size(m_t, 2),
+        size(m_t, 1),
+        nnz_per_row,
+        collect(Iterators.flatten(transpose(reshape(colval_padded, Int64(max_nnz), :)))), # vector -> matrix -> vector with inverted dimensions
+        collect(Iterators.flatten(transpose(reshape(nzval_padded, Int64(max_nnz), :)))),
+        backend,
+    )
+end
+
+function SparseGPUMatrixELL(
+    m::SparseMatrixCSC{Tv,Ti},
+    backend::Backend,
+) where {Tv,Ti<:Integer}
+    SparseGPUMatrixELL(transpose(sparse(transpose(m))), backend)
+end
+
+
+# Base methods for the SparseGPUMatrixCSR type
+Base.size(A::SparseGPUMatrixELL) = (A.m, A.n)
+Base.size(A::SparseGPUMatrixELL, i::Int) = (i == 1) ? A.m : A.n
+Base.length(A::SparseGPUMatrixELL) = A.m * A.n
+Base.show(io::IO, A::SparseGPUMatrixELL) = print(
+    io,
+    "SparseGPUMatrixELL{$(eltype(A.nzval))}($(size(A, 1)), $(size(A, 2))) - $(nnz(A)) explicit elements",
+)
+Base.display(A::SparseGPUMatrixELL) = show(stdout, A)
+
+
+
+function Base.getindex(A::SparseGPUMatrixELL, i::Int, j::Int)
+    #@warn "Scalar indexing on a SparseGPUMatrixCSR is slow. For better performance, vectorize the operation."
+    if i < 1 || i > A.m || j < 1 || j > A.n
+        throw(BoundsError(A, (i, j)))
+    end
+    row_offset = i - 1
+    # The elements of the row i are stored at col+row_offset for col striding with step = n
+    for col = 1:A.n:length(A.colval)
+        if A.colval[col+row_offset] == j
+            return A.nzval[col+row_offset]
+        end
+    end
+    return zero(eltype(A.nzval))
+
+
+end
+
+function Base.setindex!(A::SparseGPUMatrixELL, v, i::Int, j::Int)
+    if i < 1 || i > A.m || j < 1 || j > A.n
+        throw(BoundsError(A, (i, j)))
+    end
+    row_offset = i - 1
+
+    for col = 1:A.n:length(A.colval)
+        if A.colval[col+row_offset] == j
+            A.nzval[col+row_offset] = v
+            return
+        end
+    end
+    throw(
+        ArgumentError(
+            "Index ($i, $j) is not in the matrix. Adding new values is not supported yet.",
+        ),
+    ) # TODO : Implement adding new values
+end
+
+# SparseArrays functions
+# Function to get the number of nonzeros in the matrix
+SparseArrays.nnz(A::SparseGPUMatrixELL) = reduce(+, A.nnz_per_row)
+#sprand_gpu(::Type{Tv}, m::Int, n::Int, p::Real, backend::Backend) where {Tv} =
+#    SparseGPUMatrixCSR(transpose(SparseArrays.sprand(Tv, m, n, p)), backend)
+
+# KA functions
+KernelAbstractions.get_backend(A::SparseGPUMatrixELL) = get_backend(A.nzval)

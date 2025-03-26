@@ -7,12 +7,14 @@ using SparseArrays
 import SparseArrays: sprand
 using LinearAlgebra
 
-export SparseGPUMatrixCSR,
-    AbstractSparseGPUMatrix,
+export AbstractSparseGPUMatrix,
+    SparseGPUMatrixCSR,
+    SparseGPUMatrixELL,
     SparseGPUVector,
     AbstractSparseGPUVector,
-    GPU_spmul!,
-    sprand_gpu
+    gpu_spmv!,
+    sprand_gpu,
+    monoid_neutral
 
 include("algebra.jl")
 include("GPUGraphsMatrix.jl")

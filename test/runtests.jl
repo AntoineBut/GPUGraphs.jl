@@ -200,6 +200,67 @@ Random.seed!(1234)
         end
     end
 
+    @testset "SparseGPUMatrixELL" begin
+        @testset "constructor" begin
+            TEST_VECTOR_TYPE_VALS = typeof(allocate(TEST_BACKEND, Float32, 0))
+            TEST_VECTOR_TYPE_INDS = typeof(allocate(TEST_BACKEND, Int32, 0))
+            function test_vector_types(A::SparseGPUMatrixELL, vals, inds)
+                @test typeof(A.nnz_per_row) == inds
+                @test typeof(A.colval) == inds
+                @test typeof(A.nzval) == vals
+            end
+
+            @testset "non-empty" begin
+
+                A_dense = [
+                    1 7 0 0
+                    5 0 3 9
+                    0 2 8 0
+                    0 0 0 6
+                ]
+                A_csc = convert(SparseMatrixCSC{Float32,Int32}, A_dense)
+                A_csc_t = convert(SparseMatrixCSC{Float32,Int32}, transpose(A_dense))
+
+                A_nnz = 8
+                # Convert
+                A_dense = convert(Matrix{Float32}, A_dense)
+                ref_nnz_per_row = [2, 3, 2, 1]
+                ref_colval = [1, 1, 2, 4, 2, 3, 3, 0, 0, 4, 0, 0]
+                ref_nzval = [1, 5, 2, 6, 7, 3, 8, 0, 0, 9, 0, 0]
+
+                B_1 = SparseGPUMatrixELL(A_csc, TEST_BACKEND)
+                B_2 = SparseGPUMatrixELL(transpose(A_csc_t), TEST_BACKEND)
+                B_3 = SparseGPUMatrixELL(A_dense, TEST_BACKEND)
+
+                function test_constructor(A::SparseGPUMatrixELL)
+                    @test size(A, 1) == 4
+                    @test size(A, 2) == 4
+                    @test size(A) == (4, 4)
+                    @test length(A) == 16
+                    @test nnz(A) == A_nnz
+                    @test get_backend(A) == TEST_BACKEND
+                    display(A)
+                    @allowscalar @test A.nnz_per_row == ref_nnz_per_row
+                    @allowscalar @test A.colval == ref_colval
+                    @allowscalar @test A.nzval == ref_nzval
+                    test_vector_types(A, TEST_VECTOR_TYPE_VALS, TEST_VECTOR_TYPE_INDS)
+                    all_equal = true
+                    for i = 1:4
+                        for j = 1:4
+                            @allowscalar all_equal = all_equal && A[i, j] == A_dense[i, j]
+                        end
+                    end
+                    @test all_equal
+                    @test_throws BoundsError A[11, 1]
+                end
+                test_constructor(B_1)
+                test_constructor(B_2)
+                test_constructor(B_3)
+            end
+        end
+
+    end
+
     @testset "SparseGPUVector" begin
         @testset "Constructors" begin
             @testset "empty" begin
@@ -242,7 +303,7 @@ Random.seed!(1234)
             C_gpu = KernelAbstractions.zeros(TEST_BACKEND, Float32, 10)
             #semiring = Semiring(*, Monoid(+, 0.0), 0.0, 1.0)
 
-            GPU_spmul!(C_gpu, A_gpu, B_gpu)
+            gpu_spmv!(C_gpu, A_gpu, B_gpu)
             @allowscalar @test C_gpu == C_cpu
 
             # Large matrix
@@ -256,7 +317,7 @@ Random.seed!(1234)
             C_gpu = KernelAbstractions.zeros(TEST_BACKEND, Float32, LARGE_NB)
             #semiring = Semiring((x, y) -> x * y, Monoid(+, 0.0), 0.0, 1.0)
 
-            GPU_spmul!(C_gpu, A_gpu, B_gpu)
+            gpu_spmv!(C_gpu, A_gpu, B_gpu)
             KernelAbstractions.synchronize(TEST_BACKEND)
 
             #@allowscalar @test C_gpu == C_cpu

@@ -36,7 +36,6 @@ for SIZE in SIZES
     b_ssGB = b
     b_gpu = MtlVector(b)
 
-    semiring = Semiring(*, +, zero(Int32), one(Int32))
 
     SUITE["mul!"]["CPU"]["SparseArrays-CSR"] = @benchmarkable begin
         for i = 1:10
@@ -57,7 +56,7 @@ for SIZE in SIZES
 
     SUITE["mul!"]["GPU"]["GPUGraphs"] = @benchmarkable begin
         for i = 1:10
-            GPU_spmul!(res_gpu, $A_csr_gpu, $b_gpu, $semiring)
+            gpu_spmv!(res_gpu, $A_csr_gpu, $b_gpu)
         end
         KernelAbstractions.synchronize(BACKEND)
     end evals = 1 setup = (res_gpu = allocate(BACKEND, Float32, $SIZE))
