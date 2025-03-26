@@ -304,8 +304,8 @@ function SparseGPUMatrixELL(
         size(m_t, 2),
         size(m_t, 1),
         nnz_per_row,
-        collect(Iterators.flatten(transpose(reshape(colval_padded, Int64(max_nnz), :)))), # vector -> matrix -> vector with inverted dimensions
-        collect(Iterators.flatten(transpose(reshape(nzval_padded, Int64(max_nnz), :)))),
+        collect(Iterators.flatten(transpose(reshape(colval_padded, Int(max_nnz), :)))), # vector -> matrix -> vector with inverted dimensions
+        collect(Iterators.flatten(transpose(reshape(nzval_padded, Int(max_nnz), :)))),
         backend,
     )
 end
