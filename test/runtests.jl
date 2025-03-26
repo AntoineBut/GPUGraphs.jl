@@ -33,7 +33,7 @@ Random.seed!(1234)
     TEST_BACKEND = if get(ENV, "CI", "false") == "false"
         Pkg.add("Metal")
         using Metal
-        KernelAbstractions.CPU()  # our personal laptops
+        Metal.MetalBackend()  # our personal laptops
     #KernelAbstractions.CPU()
     else
         KernelAbstractions.CPU()
@@ -96,7 +96,7 @@ Random.seed!(1234)
                     all_equal = true
                     for i = 1:10
                         for j = 1:10
-                            all_equal = all_equal && A[i, j] == A_csc[i, j]
+                            @allowscalar all_equal = all_equal && A[i, j] == A_csc[i, j]
                         end
                     end
                     @test all_equal
