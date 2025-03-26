@@ -89,6 +89,7 @@ Random.seed!(1234)
                     @test length(A) == 100
                     @test nnz(A) == A_nnz
                     @test get_backend(A) == TEST_BACKEND
+                    display(A)
                     @allowscalar @test A.rowptr == ref_rowptr
                     @allowscalar @test A.colval == ref_colval
                     @allowscalar @test A.nzval == ref_nzval
@@ -100,6 +101,7 @@ Random.seed!(1234)
                         end
                     end
                     @test all_equal
+                    @test_throws BoundsError A[11, 1]
                 end
                 test_constructor(B_0)
                 test_constructor(B_1)
