@@ -295,7 +295,7 @@ function SparseGPUMatrixELL(
         row_end = rowptr[i+1]
         row_nnz = row_end - row_start
         colval_padded[(i-1)*max_nnz+1:i*max_nnz] =
-            [colval[row_start:row_end-1]; zeros(Ti, max_nnz - row_nnz)]
+            [colval[row_start:row_end-1]; ones(Ti, max_nnz - row_nnz)]
         nzval_padded[(i-1)*max_nnz+1:i*max_nnz] =
             [nzval[row_start:row_end-1]; zeros(Tv, max_nnz - row_nnz)]
     end
