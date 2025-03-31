@@ -18,6 +18,32 @@ function call_test_kernel()
 end
 
 call_test_kernel()
+
+
+using csv
+
+# Load csv file, for each line "a b c" write to a new file "a b" (without c)
+
+function load_csv(original_file::String, new_file::String)
+    open(original_file, "r") do file
+        open(new_file, "a") do new_file
+            # Skip header
+            readline(file)
+            for line in eachline(file)
+                # Split the line by comma
+                parts = split(line, " ")
+                # Write the first two parts to the new file
+                if parts[1] != parts[2]
+                    write(new_file, join(parts[1:2], " "))
+                    write(new_file, "\n")
+                end
+
+            end
+        end
+    end
+
+end
+
 """
 SIZE = 10^6
 FILL = 100/SIZE
@@ -79,8 +105,9 @@ using Graphs
 using GraphIO.EdgeList
 
 
-MAIN_TYPE = Int32
-A_T = adjacency_matrix(loadgraph("benchmark/data/italy_osm/italy_osm.mtx", EdgeListFormat()), MAIN_TYPE; dir=:in)
+MAIN_TYPE = Bool
+graph = SimpleGraph(loadgraph("benchmark/data/nlpkkt160/nlpkkt160-bool.mtx", EdgeListFormat()))
+A_T = adjacency_matrix(graph, MAIN_TYPE; dir=:in)
 SIZE = size(A_T, 1)
 a_ssgb = GBMatrix{MAIN_TYPE}(A_T)
 A_ell_gpu = SparseGPUMatrixELL(transpose(A_T), Metal.MetalBackend())
@@ -95,7 +122,7 @@ res_gpu_2 = KernelAbstractions.zeros(Metal.MetalBackend(), MAIN_TYPE, SIZE)
 
 
 for _ in 1:10
-    gpu_spmv!(res_gpu_1, A_ell_gpu, b_gpu)
+    gpu_spmv!(res_gpu_1, A_ell_gpu, b_gpu, &, |, |)
 end 
 KernelAbstractions.synchronize(Metal.MetalBackend())
 
@@ -109,7 +136,7 @@ KernelAbstractions.synchronize(Metal.MetalBackend())
 
 gpu_spmv!(res_gpu_1, A_gpu_csr, b_gpu, &, |, |)
 KernelAbstractions.synchronize(Metal.MetalBackend())
-mul!(res_ssgb, a_ssgb, b, (∧, ∨); accum=∨)
+mul!(res_ssgb, a_ssgb, b_cpu, (∧, ∨); accum=∨)
 
 
 

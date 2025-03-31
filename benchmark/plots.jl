@@ -50,10 +50,9 @@ speedup_plot = plot(
     ylabel = "Speedup",
     title = "Speedup of GPUGraphs relative to SSBG",
     legend = true,
-    ylim = (0, 7),
     xscale = :log2,
     xticks = [2^i for i = 1:30],
-    yticks = [0, 1, 2, 3, 4, 5, 6],
+    yticks = 1:10,
     markershape = [:utriangle :x :circle :square],
 )
 display(speedup_plot)
@@ -62,90 +61,33 @@ savefig(p, "benchmark/out/spmv_results.png")
 savefig(speedup_plot, "benchmark/out/spmv_speedup.png")
 
 
-df2 = DataFrame(CSV.File("benchmark/out/spmv_results_comOrkut.csv"))
+df2 = DataFrame(CSV.File("benchmark/out/spmv_results_data.csv"))
 df2[!, :time] /= 1e9  # convert ns to s
 
-time_csr = df2[df2.implementation.=="GPUGraphsCSR", :time][end]
-time_ssgb = df2[df2.implementation.=="SuiteSparseGraphBLAS", :time][end]
+# For each dataset, normalize the time by the time of the SuiteSparseGraphBLAS implementation
+gb_times = df2[df2.implementation.=="SuiteSparseGraphBLAS", :time]
+gb_times_column = repeat(gb_times, inner = 3)
+# Normalize the time by the SuiteSparseGraphBLAS time
+df2[!, :time] = df2[!, :time] ./ gb_times_column
 
-# Plot the data
 
-p2 = bar(
-    1:1,
-    [time_ssgb],
-    label = "SuiteSparseGraphBLAS",
-    bar_width = 0.5,
+# Plot the data as 3 bar plots (one for each dataset), with the x-axis as the implementation, and the y-axis as the time
+p2 = @df df2 bar(
+    1:nrow(df2),
+    :time,
+    group = :implementation,
+    bar_width = 1,
+    ylabel = "Time (relative to SuiteSparseGraphBLAS)",
     xlabel = "Implementation",
-    ylabel = "Time (s)",
-    title = "spmv! on com-Orkut (Social Network)",
+    xticks = (2:3:10, unique(df2.dataset)),
     legend = :topleft,
-)
-bar!(
-    2:2,
-    [time_csr],
-    label = "GPUGraphsCSR",
-    bar_width = 0.5,
-    xlabel = "Implementation",
-    ylabel = "Time (s)",
-    legend = :topleft,
+    title = "Sparse Matrix-Vector Multiplication",
 )
 # Add the speedup
-speedup = time_ssgb / time_csr
-annotate!(2, 3, text("Speedup: $(round(speedup, digits = 2))x", :black, 8, :left))
-display(p2)
-
-
-
-df3 = DataFrame(CSV.File("benchmark/out/spmv_results_osm.csv"))
-df3[!, :time] /= 1e9  # convert ns to s
-
-time_csr = df3[df3.implementation.=="GPUGraphsCSR", :time][end]
-time_ell = df3[df3.implementation.=="GPUGraphsELL", :time][end]
-time_ssgb = df3[df3.implementation.=="SuiteSparseGraphBLAS", :time][end]
-
-# Plot the data
-
-p3 = bar(
-    1:1,
-    [time_ssgb],
-    label = "SuiteSparseGraphBLAS",
-    bar_width = 0.5,
-    xlabel = "Implementation",
-    ylabel = "Time (s)",
-    title = "spmv! on Italy-OSM (Road Network)",
-    legend = :topleft,
-)
-bar!(
-    2:2,
-    [time_csr],
-    label = "GPUGraphsCSR",
-    bar_width = 0.5,
-    xlabel = "Implementation",
-    ylabel = "Time (s)",
-    legend = :topleft,
-)
-bar!(
-    3:3,
-    [time_ell],
-    label = "GPUGraphsELL",
-    bar_width = 0.5,
-    xlabel = "Implementation",
-    ylabel = "Time (s)",
-    legend = :topleft,
-)
-# Add the speedup
-speedup_csr = time_ssgb / time_csr
-speedup_ell = time_ssgb / time_ell
-y_coord1 = time_csr * 1.1
-y_coord2 = time_ell * 1.1
-annotate!(
-    2,
-    y_coord1,
-    text("Speedup with CSR: $(round(speedup_csr, digits = 2))x \n", :black, 8, :center),
-)
-annotate!(
-    3,
-    y_coord2,
-    text("Speedup with ELL: $(round(speedup_ell, digits = 2))x \n", :black, 8, :center),
-)
-display(p3)
+speedups = 1 ./ df2[!, :time]
+speedups[end] = 1.0
+annotate!(2, 0.2, text("$(round(speedups[2], digits = 2))x \n", :black, 8, :center))
+annotate!(3, 0.2, text("$(round(speedups[3], digits = 2))x \n", :black, 8, :center))
+annotate!(5, 0.2, text("$(round(speedups[5], digits = 2))x \n", :black, 8, :center))
+annotate!(6, 0.2, text("$(round(speedups[6], digits = 2))x \n", :black, 8, :center))
+annotate!(8, 0.2, text("$(round(speedups[8], digits = 2))x \n", :black, 8, :center))

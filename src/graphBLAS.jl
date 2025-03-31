@@ -57,7 +57,8 @@ end
     # Computes A*B and stores the result in C using the semiring semiring.
     row = @index(Global, Linear)
     acc = monoid_neutral(eltype(a_nz_val), add)
-    for idx = row:n:a_nnz_per_row[row]*n+row-1
+    for iter = 0:a_nnz_per_row[row]-1
+        idx = row + iter * n
         acc = add(acc, mul(b[a_col_val[idx]], a_nz_val[idx]))
     end
     c[row] = accum(c[row], acc)
