@@ -19,7 +19,9 @@ export AbstractSparseGPUMatrix,
 include("algebra.jl")
 include("GPUGraphsMatrix.jl")
 include("GPUGraphsVector.jl")
-include("graphBLAS.jl")
+include("spmv.jl")
+include("e_wise_ops.jl")
+include("map_and_reduce.jl")
 
 
 end
