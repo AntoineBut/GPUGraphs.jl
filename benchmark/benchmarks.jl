@@ -121,7 +121,7 @@ println(MUL_RESULTS)
 # Save results to a file
 
 CSV.write("benchmark/out/spmv_results.csv", MUL_RESULTS)
-
+#throw("Done. ")
 NB_DATASETS = 3
 DATASET_NAMES = ["OSM", "NLP-KKT", "Orkut"]
 DATASET_PATHS = [

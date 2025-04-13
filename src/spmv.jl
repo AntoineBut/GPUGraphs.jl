@@ -17,6 +17,7 @@
     acc = monoid_neutral(eltype(a_nz_val), add)
     for i = a_row_ptr[row]:a_row_ptr[row+1]-1
         acc = add(acc, mul(b[a_col_val[i]], a_nz_val[i]))
+        #acc = add(acc, mul(a_col_val[i], a_nz_val[i]))
     end
     c[row] = accum(c[row], acc)
 end
@@ -60,6 +61,7 @@ end
     for iter = 0:a_nnz_per_row[row]-1
         idx = row + iter * n
         acc = add(acc, mul(b[a_col_val[idx]], a_nz_val[idx]))
+        #acc = add(acc, mul(a_col_val[idx], a_nz_val[idx]))
     end
     c[row] = accum(c[row], acc)
 end
@@ -70,7 +72,7 @@ function gpu_spmv!(
     B::AV,
     mul::Function = *,
     add::Function = +,
-    accum::Function = +,
+    accum::Function = (x, y) -> y,
 ) where {Tv,Ti,AV<:AbstractVector{Tv}}
     # Computes A*B and stores the result in C using the semiring semiring.
     # Check dimensions

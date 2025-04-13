@@ -52,13 +52,9 @@ speedup_plot = plot(
     legend = true,
     xscale = :log2,
     xticks = [2^i for i = 1:30],
-    yticks = 1:10,
     markershape = [:utriangle :x :circle :square],
 )
 display(speedup_plot)
-# Save the plots
-savefig(p, "benchmark/out/spmv_results.png")
-savefig(speedup_plot, "benchmark/out/spmv_speedup.png")
 
 
 df2 = DataFrame(CSV.File("benchmark/out/spmv_results_data.csv"))
@@ -91,3 +87,9 @@ annotate!(3, 0.2, text("$(round(speedups[3], digits = 2))x \n", :black, 8, :cent
 annotate!(5, 0.2, text("$(round(speedups[5], digits = 2))x \n", :black, 8, :center))
 annotate!(6, 0.2, text("$(round(speedups[6], digits = 2))x \n", :black, 8, :center))
 annotate!(8, 0.2, text("$(round(speedups[8], digits = 2))x \n", :black, 8, :center))
+
+display(p2)
+# Save the plots
+savefig(p, "benchmark/out/plot_spmv_results.png")
+savefig(speedup_plot, "benchmark/out/plot_spmv_speedup.png")
+savefig(p2, "benchmark/out/plot_spmv_results_data.png")

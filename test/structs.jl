@@ -221,6 +221,151 @@ end
 
 end
 
+@testset "SparseGPUMatrixCSC" begin
+    @testset "constructor" begin
+        TEST_VECTOR_TYPE_VALS = typeof(allocate(TEST_BACKEND, Float32, 0))
+        TEST_VECTOR_TYPE_INDS = typeof(allocate(TEST_BACKEND, Int32, 0))
+        function test_vector_types(A::SparseGPUMatrixCSC, vals, inds)
+            @test typeof(A.colptr) == inds
+            @test typeof(A.rowval) == inds
+            @test typeof(A.nzval) == vals
+        end
+
+        @testset "empty" begin
+            A = SparseGPUMatrixCSC(Float32, Int32, TEST_BACKEND)
+            @test size(A, 1) == 0
+            @test size(A, 2) == 0
+            @test length(A) == 0
+            @test nnz(A) == 0
+            @test size(A) == (0, 0)
+            test_vector_types(A, TEST_VECTOR_TYPE_VALS, TEST_VECTOR_TYPE_INDS)
+        end
+
+        @testset "non-empty" begin
+            A_csc = sprand(Float32, 10, 10, 0.5)
+            A_csc = convert(SparseMatrixCSC{Float32,Int32}, A_csc)
+            A_nnz = nnz(A_csc)
+            ref_colptr = A_csc.colptr
+            # Convert to int 32
+            ref_rowval = A_csc.rowval
+            ref_nzval = A_csc.nzval
+
+            B_0 =
+                SparseGPUMatrixCSC(10, 10, ref_colptr, ref_rowval, ref_nzval, TEST_BACKEND)
+            B_1 = SparseGPUMatrixCSC(A_csc, TEST_BACKEND)
+            B_2 = SparseGPUMatrixCSC(collect(A_csc), TEST_BACKEND)
+
+            function test_constructor(A::SparseGPUMatrixCSC)
+                @test size(A, 1) == 10
+                @test size(A, 2) == 10
+                @test size(A) == (10, 10)
+                @test length(A) == 100
+                @test nnz(A) == A_nnz
+                @test get_backend(A) == TEST_BACKEND
+                display(A)
+                @allowscalar @test A.colptr == ref_colptr
+                @allowscalar @test A.rowval == ref_rowval
+                @allowscalar @test A.nzval == ref_nzval
+                test_vector_types(A, TEST_VECTOR_TYPE_VALS, TEST_VECTOR_TYPE_INDS)
+                all_equal = true
+                for i = 1:10
+                    for j = 1:10
+                        @allowscalar all_equal = all_equal && A[i, j] == A_csc[i, j]
+                    end
+                end
+                @test all_equal
+                @test_throws BoundsError A[11, 1]
+            end
+            test_constructor(B_0)
+            test_constructor(B_1)
+            test_constructor(B_2)
+
+        end
+        @testset "Throws" begin
+            # Size mismatch
+            col_ptr = [1, 4, 7, 11]
+            row_val = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+            nz_val_1 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1]
+            nz_val_2 = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+            @test_throws ArgumentError SparseGPUMatrixCSC(
+                3,
+                10,
+                col_ptr,
+                row_val,
+                nz_val_1,
+                TEST_BACKEND,
+            )
+            @test_throws ArgumentError SparseGPUMatrixCSC(
+                3,
+                10,
+                col_ptr,
+                row_val,
+                nz_val_2,
+                TEST_BACKEND,
+            )
+
+            # Rowptr mismatch
+            nz_val = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+            @test_throws ArgumentError SparseGPUMatrixCSC(
+                4,
+                10,
+                col_ptr,
+                row_val,
+                nz_val,
+                TEST_BACKEND,
+            )
+            @test_throws ArgumentError SparseGPUMatrixCSC(
+                2,
+                10,
+                col_ptr,
+                row_val,
+                nz_val,
+                TEST_BACKEND,
+            )
+            col_ptr = [-1, 4, 7, 11]
+            @test_throws ArgumentError SparseGPUMatrixCSR(
+                3,
+                10,
+                col_ptr,
+                row_val,
+                nz_val,
+                TEST_BACKEND,
+            )
+            col_ptr = [1, 4, 7, 12]
+            @test_throws ArgumentError SparseGPUMatrixCSR(
+                3,
+                10,
+                col_ptr,
+                row_val,
+                nz_val,
+                TEST_BACKEND,
+            )
+
+            # Colval mismatch
+            row_val = [1, 2, 3, 4, 5, 6, 7, 8, 9, 15]
+            @test_throws ArgumentError SparseGPUMatrixCSR(
+                3,
+                10,
+                col_ptr,
+                row_val,
+                nz_val,
+                TEST_BACKEND,
+            )
+
+        end
+
+    end
+    @testset "Basic Utilities" begin
+        A_cpu = sprand(Float32, 10, 10, 0.5)
+        A_gpu = SparseGPUMatrixCSC(A_cpu, TEST_BACKEND)
+        @test size(A_gpu, 1) == 10
+        @test size(A_gpu, 2) == 10
+        @test size(A_gpu) == (10, 10)
+        @test length(A_gpu) == 100
+        @test nnz(A_gpu) == nnz(A_cpu)
+    end
+end
+
 @testset "SparseGPUVector" begin
     @testset "Constructors" begin
         @testset "empty" begin

@@ -17,9 +17,6 @@ function call_test_kernel()
     return A
 end
 
-call_test_kernel()
-
-
 using csv
 
 # Load csv file, for each line "a b c" write to a new file "a b" (without c)
@@ -44,9 +41,9 @@ function load_csv(original_file::String, new_file::String)
 
 end
 
-"""
+
 SIZE = 10^6
-FILL = 100/SIZE
+FILL = 100 / SIZE
 BACKEND = Metal.MetalBackend()
 A_csc_cpu = sprand(Float32, SIZE, SIZE, FILL)
 A_csr_cpu = transpose(A_csc_cpu)
@@ -55,7 +52,7 @@ A_csr_gpu = SparseGPUMatrixCSR(A_csr_cpu, BACKEND)
 A_ell_gpu = SparseGPUMatrixELL(A_csr_cpu, BACKEND)
 b = rand(Float32, SIZE)
 b_gpu = MtlVector(b)
-res_gpu1 = KernelAbstractions.zeros(BACKEND, Float32, SIZE) 
+res_gpu1 = KernelAbstractions.zeros(BACKEND, Float32, SIZE)
 res_gpu2 = KernelAbstractions.zeros(BACKEND, Float32, SIZE)
 res_gpu3 = KernelAbstractions.zeros(BACKEND, Float32, SIZE)
 
@@ -75,7 +72,7 @@ KernelAbstractions.synchronize(BACKEND)
 
 
 SIZE = 10^5
-FILL = 10/SIZE
+FILL = 10 / SIZE
 BACKEND = Metal.MetalBackend()
 A_csc_cpu = sprand(Bool, SIZE, SIZE, FILL)
 A_csr_cpu = transpose(A_csc_cpu)
@@ -84,7 +81,7 @@ A_csr_gpu = SparseGPUMatrixCSR(A_csr_cpu, BACKEND)
 A_ell_gpu = SparseGPUMatrixELL(A_csr_cpu, BACKEND)
 b = rand(Bool, SIZE)
 b_gpu = MtlVector(b)
-res_gpu1 = KernelAbstractions.zeros(BACKEND, Bool, SIZE) 
+res_gpu1 = KernelAbstractions.zeros(BACKEND, Bool, SIZE)
 res_gpu2 = KernelAbstractions.zeros(BACKEND, Bool, SIZE)
 res_gpu3 = KernelAbstractions.zeros(BACKEND, Bool, SIZE)
 
@@ -105,9 +102,10 @@ using Graphs
 using GraphIO.EdgeList
 
 
-MAIN_TYPE = Bool
-graph = SimpleGraph(loadgraph("benchmark/data/nlpkkt160/nlpkkt160-bool.mtx", EdgeListFormat()))
-A_T = adjacency_matrix(graph, MAIN_TYPE; dir=:in)
+MAIN_TYPE = Int32
+graph =
+    SimpleGraph(loadgraph("benchmark/data/nlpkkt160/nlpkkt160-bool.mtx", EdgeListFormat()))
+A_T = adjacency_matrix(graph, MAIN_TYPE; dir = :in)
 SIZE = size(A_T, 1)
 a_ssgb = GBMatrix{MAIN_TYPE}(A_T)
 A_ell_gpu = SparseGPUMatrixELL(transpose(A_T), Metal.MetalBackend())
@@ -120,13 +118,20 @@ res_ssgb = GBVector(zeros(MAIN_TYPE, SIZE))
 res_gpu_1 = KernelAbstractions.zeros(Metal.MetalBackend(), MAIN_TYPE, SIZE)
 res_gpu_2 = KernelAbstractions.zeros(Metal.MetalBackend(), MAIN_TYPE, SIZE)
 
+Metal.@capture begin
+    for _ = 1:5
+        gpu_spmv!(res_gpu_2, A_csr_gpu, b_gpu)
+    end
+    KernelAbstractions.synchronize(Metal.MetalBackend())
 
-for _ in 1:10
-    gpu_spmv!(res_gpu_1, A_ell_gpu, b_gpu, &, |, |)
-end 
-KernelAbstractions.synchronize(Metal.MetalBackend())
 
-for _ in 1:10
+    for _ = 1:5
+        gpu_spmv!(res_gpu_1, A_ell_gpu, b_gpu)
+    end
+    KernelAbstractions.synchronize(Metal.MetalBackend())
+end
+
+for _ = 1:5
     gpu_spmv!(res_gpu_2, A_csr_gpu, b_gpu)
 end
 KernelAbstractions.synchronize(Metal.MetalBackend())
@@ -136,8 +141,4 @@ KernelAbstractions.synchronize(Metal.MetalBackend())
 
 gpu_spmv!(res_gpu_1, A_gpu_csr, b_gpu, &, |, |)
 KernelAbstractions.synchronize(Metal.MetalBackend())
-mul!(res_ssgb, a_ssgb, b_cpu, (∧, ∨); accum=∨)
-
-
-
-	"""
+mul!(res_ssgb, a_ssgb, b_cpu, (∧, ∨); accum = ∨)

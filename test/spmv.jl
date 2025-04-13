@@ -16,7 +16,6 @@ end
     B_gpu = allocate(TEST_BACKEND, Float32, 10)
     copyto!(B_gpu, B_cpu)
     C_gpu_1 = KernelAbstractions.zeros(TEST_BACKEND, Float32, 10)
-    #semiring = Semiring(*, Monoid(+, 0.0), 0.0, 1.0)
 
     gpu_spmv!(C_gpu_1, A_gpu_csr, B_gpu)
     KernelAbstractions.synchronize(TEST_BACKEND)

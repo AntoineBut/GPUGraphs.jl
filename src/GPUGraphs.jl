@@ -9,6 +9,7 @@ using LinearAlgebra
 
 export AbstractSparseGPUMatrix,
     SparseGPUMatrixCSR,
+    SparseGPUMatrixCSC,
     SparseGPUMatrixELL,
     SparseGPUVector,
     AbstractSparseGPUVector,
