@@ -19,12 +19,10 @@ mutable struct SparseGPUVector{
     Ti<:Integer,
     Gv<:AbstractVector{Tv},
     Gi<:AbstractVector{Ti},
-    B<:KernelAbstractions.Backend,
 } <: AbstractSparseGPUVector{Tv,Ti}
     n::Int                  # Size
     nzind::Gi     # index of stored values
     nzval::Gv    # Stored values, typically nonzeros
-    backend::B
 
     function SparseGPUVector(
         n::Int,
@@ -53,7 +51,7 @@ mutable struct SparseGPUVector{
         else
             nzval_gpu = nzval
         end
-        new{Tv,Ti,Gv,Gi,B}(n, nzind_gpu, nzval_gpu, backend)
+        new{Tv,Ti,Gv,Gi}(n, nzind_gpu, nzval_gpu)
     end
 end
 
@@ -87,7 +85,7 @@ end
 #TODO : Bolean matrix that can omit the values and only store the indices
 
 # Base methods for the SparseGPUVector type
-Base.size(V::SparseGPUVector) = V.n
+Base.size(V::SparseGPUVector) = (V.n)
 Base.size(V::SparseGPUVector, i::Int) = (i == 1) ? V.n : 1
 Base.length(V::SparseGPUVector) = V.n
 function Base.getindex(V::SparseGPUVector, i::Int)
@@ -104,7 +102,7 @@ function Base.getindex(V::SparseGPUVector, i::Int)
 end
 
 function Base.setindex!(V::SparseGPUVector, val, i::Int)
-    @warn "Scalar indexing on a SparseGPUVector is slow. For better performance, vectorize the operation."
+    #@warn "Scalar indexing on a SparseGPUVector is slow. For better performance, vectorize the operation."
     if i < 1 || i > V.n
         throw(BoundsError(V, i))
     end
@@ -124,4 +122,4 @@ end
 SparseArrays.nnz(V::SparseGPUVector) = length(V.nzval)
 
 # KA functions
-KernelAbstractions.get_backend(V::SparseGPUVector) = V.backend
+KernelAbstractions.get_backend(V::SparseGPUVector) = get_backend(V.nzval)

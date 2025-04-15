@@ -1,6 +1,7 @@
 module GPUGraphs
 
 using KernelAbstractions
+using Atomix
 using GPUArrays
 using Graphs
 using SparseArrays
@@ -21,6 +22,7 @@ include("algebra.jl")
 include("GPUGraphsMatrix.jl")
 include("GPUGraphsVector.jl")
 include("spmv.jl")
+include("spmspv.jl")
 include("e_wise_ops.jl")
 include("map_and_reduce.jl")
 

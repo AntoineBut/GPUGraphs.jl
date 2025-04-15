@@ -1,7 +1,5 @@
 # This files contains implementations of GraphBLAS operations for sparse matrices and vectors.
 
-# Priority : efficient elementwise operations using mapreduce, Matrix-Vector products, Matrix-Matrix products with GraphBLAS semirings
-
 @kernel function csr_spmv_kernel!(
     c,
     @Const(a_row_ptr),
@@ -43,6 +41,51 @@ function gpu_spmv!(
     kernel! = csr_spmv_kernel!(backend)
     kernel!(C, A.rowptr, A.colval, A.nzval, B, mul, add, accum; ndrange = size(A, 1))
 end
+
+
+@kernel function csc_spmv_kernel!(
+    c,
+    @Const(a_col_ptr),
+    @Const(a_row_val),
+    @Const(a_nz_val),
+    @Const(b),
+    mul,
+    add,
+    accum,
+)
+    # Computes A*B and stores the result in C using the semiring semiring.
+    col = @index(Global, Linear)
+    acc = monoid_neutral(eltype(a_nz_val), add)
+    for i = a_col_ptr[col]:a_col_ptr[col+1]-1
+        row = a_row_val[i]
+        acc = mul(b[col], a_nz_val[i])
+        Atomix.@atomic c[row] += acc
+        #c[row] = Float32(1.0)
+    end
+end
+
+function gpu_spmv!(
+    C::AV,
+    A::SparseGPUMatrixCSC{Tv,Ti},
+    B::AV,
+    mul::Function = *,
+    add::Function = +,
+    accum::Function = +,
+) where {Tv,Ti,AV<:AbstractVector{Tv}}
+    # Computes A*B and stores the result in C using the semiring semiring.
+    # Check dimensions
+    if size(A, 2) != length(B)
+        throw(DimensionMismatch("Matrix dimensions must agree"))
+    end
+    if size(C, 1) != size(A, 1)
+        throw(DimensionMismatch("Matrix dimensions must agree"))
+    end
+    # Call the kernel
+    backend = get_backend(C)
+    kernel! = csc_spmv_kernel!(backend)
+    kernel!(C, A.colptr, A.rowval, A.nzval, B, mul, add, accum; ndrange = size(A, 1))
+end
+
 
 @kernel function ell_spmv_kernel!(
     c,
