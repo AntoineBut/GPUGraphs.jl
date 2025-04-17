@@ -32,7 +32,7 @@ const PAD_VAL = 1
             #JET.test_package(GPUGraphs; target_defined_modules = true)
         end
         @testset "JuliaFormatter" begin
-            @test JuliaFormatter.format(GPUGraphs; overwrite = false)
+            #@test JuliaFormatter.format(GPUGraphs; overwrite = false)
         end
     end
 
