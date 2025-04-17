@@ -142,3 +142,18 @@ KernelAbstractions.synchronize(Metal.MetalBackend())
 gpu_spmv!(res_gpu_1, A_gpu_csr, b_gpu, &, |, |)
 KernelAbstractions.synchronize(Metal.MetalBackend())
 mul!(res_ssgb, a_ssgb, b_cpu, (∧, ∨); accum = ∨)
+
+
+
+using Metal
+using KernelAbstractions
+using LinearAlgebra
+BACKEND = Metal.MetalBackend()
+cpu_vec = rand(Float32, 10)
+cpu_vec2 = rand(Float32, 10) * 0.001 + cpu_vec
+
+gpu_vec = KernelAbstractions.zeros(BACKEND, Float32, 10)
+copyto!(gpu_vec, cpu_vec2)
+
+println("diff on cpu: ", norm(cpu_vec2 - cpu_vec))
+println("diff on gpu: ", norm(gpu_vec - cpu_vec))

@@ -34,7 +34,6 @@ end
     gpu_spmv!(C_gpu_3, A_gpu_csc, B_gpu)
     KernelAbstractions.synchronize(TEST_BACKEND)
     copyto!(res, C_gpu_3)
-    println("C_gpu_3: ", res)
     @test isapprox(res, C_cpu)
 
     # Large matrix
@@ -56,22 +55,13 @@ end
     gpu_spmv!(C_gpu_3, A_gpu_csc, B_gpu)
     KernelAbstractions.synchronize(TEST_BACKEND)
 
-    # Count the number of differences
-    diff_1 = 0
-    diff_2 = 0
-    diff_3 = 0.0
+    res = zeros(Float32, LARGE_NB)
 
-    for i = 1:LARGE_NB
-        @allowscalar diff_1 += isapprox(C_gpu_1[i], C_cpu[i])
-        @allowscalar  diff_2 += isapprox(C_gpu_2[i], C_cpu[i])
-        @allowscalar diff_3 += C_gpu_3[i] - C_cpu[i]
-    end
-    @test diff_1 <= 0
-    @test diff_2 <= 0
-    @test diff_3 <= 1e-5
-    println("Number of differences: $diff_1, $diff_2 out of $LARGE_NB")
-    println("Approximation error on CSC: $diff_3 out of $LARGE_NB")
-    println("C_gpu_3: \n", C_gpu_3[1:10])
-    println("C_cpu: \n", C_cpu[1:10])
+    copyto!(res, C_gpu_1)
+    @test isapprox(res, C_cpu)
+    copyto!(res, C_gpu_2)
+    @test isapprox(res, C_cpu)
+    copyto!(res, C_gpu_3)
+    @test isapprox(res, C_cpu)
 
 end

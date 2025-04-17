@@ -1,6 +1,7 @@
 using GPUGraphs
 using Test
 using KernelAbstractions
+using LinearAlgebra
 using GPUArrays
 using SparseArrays
 using Random

@@ -5,7 +5,7 @@
     @Const(a_row_val),
     @Const(a_nz_val),
     @Const(b_nzind),
-	@Const(b_nz_val),
+    @Const(b_nz_val),
     mul,
     add,
     accum,
@@ -39,7 +39,16 @@ function gpu_spmspv!(
     # Call the kernel
     backend = get_backend(C)
     kernel! = csc_spmspv_kernel!(backend)
-    kernel!(C, A.colptr, A.rowval, A.nzval, 
-	B.nzind, B.nzval,
-	mul, add, accum; ndrange = size(A, 1))
+    kernel!(
+        C,
+        A.colptr,
+        A.rowval,
+        A.nzval,
+        B.nzind,
+        B.nzval,
+        mul,
+        add,
+        accum;
+        ndrange = size(A, 1),
+    )
 end
