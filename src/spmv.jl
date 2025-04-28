@@ -6,27 +6,52 @@
     @Const(a_col_val),
     @Const(a_nz_val),
     @Const(b),
+    @Const(monoid_neutral_element),
     mul,
     add,
     accum,
 )
     # Computes A*B and stores the result in C using the semiring semiring.
     row = @index(Global, Linear)
-    acc = monoid_neutral(eltype(a_nz_val), add)
+    acc = monoid_neutral_element
     for i = a_row_ptr[row]:a_row_ptr[row+1]-1
-        acc = add(acc, mul(b[a_col_val[i]], a_nz_val[i]))
-        #acc = add(acc, mul(a_col_val[i], a_nz_val[i]))
+        col = a_col_val[i]
+        acc = add(acc, mul(a_nz_val[i], b[col], row, col, col, 1), row, col, col, 1)
     end
-    c[row] = accum(c[row], acc)
+    c[row] = accum(c[row], acc, row, 1, row, 1)
+end
+
+@kernel function masked_csr_spmv_kernel!(
+    c,
+    @Const(a_row_ptr),
+    @Const(a_col_val),
+    @Const(a_nz_val),
+    @Const(b),
+    @Const(monoid_neutral_element),
+    @Const(mask),
+    mul,
+    add,
+    accum,
+)
+    # Computes A*B and stores the result in C using the semiring semiring.
+    entry_nb = @index(Global, Linear)
+    row = mask[entry_nb]
+    acc = monoid_neutral_element
+    for i = a_row_ptr[row]:a_row_ptr[row+1]-1
+        col = a_col_val[i]
+        acc = add(acc, mul(a_nz_val[i], b[col], row, col, col, 1), row, col, col, 1)
+    end
+    c[row] = accum(c[row], acc, row, 1, row, 1)
 end
 
 function gpu_spmv!(
     C::AV,
     A::SparseGPUMatrixCSR{Tv,Ti},
-    B::AV,
-    mul::Function = *,
-    add::Function = +,
-    accum::Function = +,
+    B::AV;
+    mul::Function = GPUGraphs_mul,
+    add::Function = GPUGraphs_add,
+    accum::Function = GPUGraphs_second,
+    mask::Union{SparseGPUVector{Bool,Ti}, Nothing} = nothing,
 ) where {Tv,Ti,AV<:AbstractVector{Tv}}
     # Computes A*B and stores the result in C using the semiring semiring.
     # Check dimensions
@@ -38,8 +63,37 @@ function gpu_spmv!(
     end
     # Call the kernel
     backend = get_backend(C)
+    if mask !== nothing
+        kernel! = masked_csr_spmv_kernel!(backend)
+        kernel!(
+            C,
+            A.rowptr,
+            A.colval,
+            A.nzval,
+            B,
+            monoid_neutral(Tv, add),
+            mask.nzind,
+            mul,
+            add,
+            accum;
+            ndrange = nnz(mask),
+        )
+        return
+    end
+
     kernel! = csr_spmv_kernel!(backend)
-    kernel!(C, A.rowptr, A.colval, A.nzval, B, mul, add, accum; ndrange = size(A, 1))
+    kernel!(
+        C,
+        A.rowptr,
+        A.colval,
+        A.nzval,
+        B,
+        monoid_neutral(Tv, add),
+        mul,
+        add,
+        accum;
+        ndrange = size(A, 1),
+    )
 end
 
 
@@ -49,28 +103,28 @@ end
     @Const(a_row_val),
     @Const(a_nz_val),
     @Const(b),
+    @Const(monoid_neutral_element),
     mul,
     add,
     accum,
 )
     # Computes A*B and stores the result in C using the semiring semiring.
     col = @index(Global, Linear)
-    acc = monoid_neutral(eltype(a_nz_val), add)
+    acc = monoid_neutral_element
     for i = a_col_ptr[col]:a_col_ptr[col+1]-1
         row = a_row_val[i]
-        acc = mul(b[col], a_nz_val[i])
+        acc = mul(b[col], a_nz_val[i], row, col, col, 1)
         Atomix.@atomic c[row] += acc
-        #c[row] = Float32(1.0)
     end
 end
 
 function gpu_spmv!(
     C::AV,
     A::SparseGPUMatrixCSC{Tv,Ti},
-    B::AV,
-    mul::Function = *,
-    add::Function = +,
-    accum::Function = +,
+    B::AV;
+    mul::Function = GPUGraphs_mul,
+    add::Function = GPUGraphs_add,
+    accum::Function = GPUGraphs_second,
 ) where {Tv,Ti,AV<:AbstractVector{Tv}}
     # Computes A*B and stores the result in C using the semiring semiring.
     # Check dimensions
@@ -83,7 +137,18 @@ function gpu_spmv!(
     # Call the kernel
     backend = get_backend(C)
     kernel! = csc_spmv_kernel!(backend)
-    kernel!(C, A.colptr, A.rowval, A.nzval, B, mul, add, accum; ndrange = size(A, 1))
+    kernel!(
+        C,
+        A.colptr,
+        A.rowval,
+        A.nzval,
+        B,
+        monoid_neutral(Tv, add),
+        mul,
+        add,
+        accum;
+        ndrange = size(A, 1),
+    )
 end
 
 
@@ -94,28 +159,29 @@ end
     @Const(a_nnz_per_row),
     @Const(n),
     @Const(b),
+    @Const(monoid_neutral_element),
     mul,
     add,
     accum,
 )
     # Computes A*B and stores the result in C using the semiring semiring.
     row = @index(Global, Linear)
-    acc = monoid_neutral(eltype(a_nz_val), add)
+    acc = monoid_neutral_element
     for iter = 0:a_nnz_per_row[row]-1
         idx = row + iter * n
-        acc = add(acc, mul(b[a_col_val[idx]], a_nz_val[idx]))
-        #acc = add(acc, mul(a_col_val[idx], a_nz_val[idx]))
+        col = a_col_val[idx]
+        acc = add(acc, mul(a_nz_val[idx], b[col], row, col, col, 1), row, col, col, 1)
     end
-    c[row] = accum(c[row], acc)
+    c[row] = accum(c[row], acc, row, 1, row, 1)
 end
 
 function gpu_spmv!(
     C::AV,
     A::SparseGPUMatrixELL{Tv,Ti},
-    B::AV,
-    mul::Function = *,
-    add::Function = +,
-    accum::Function = (x, y) -> y,
+    B::AV;
+    mul::Function = GPUGraphs_mul,
+    add::Function = GPUGraphs_add,
+    accum::Function = GPUGraphs_second,
 ) where {Tv,Ti,AV<:AbstractVector{Tv}}
     # Computes A*B and stores the result in C using the semiring semiring.
     # Check dimensions
@@ -135,6 +201,7 @@ function gpu_spmv!(
         A.nnz_per_row,
         A.n,
         B,
+        monoid_neutral(Tv, add),
         mul,
         add,
         accum;

@@ -102,32 +102,16 @@ using Graphs
 using GraphIO.EdgeList
 
 
-MAIN_TYPE = Int32
-graph =
-    SimpleGraph(loadgraph("benchmark/data/nlpkkt160/nlpkkt160-bool.mtx", EdgeListFormat()))
-A_T = adjacency_matrix(graph, MAIN_TYPE; dir = :in)
-SIZE = size(A_T, 1)
-a_ssgb = GBMatrix{MAIN_TYPE}(A_T)
-A_ell_gpu = SparseGPUMatrixELL(transpose(A_T), Metal.MetalBackend())
-A_csr_gpu = SparseGPUMatrixCSR(transpose(A_T), Metal.MetalBackend())
+MAIN_TYPE = Bool
+graph = SimpleGraph(loadgraph("benchmark/data/com-Orkut/com-Orkut.mtx", EdgeListFormat()))
+A = adjacency_matrix(graph, MAIN_TYPE; dir = :out)
+SIZE = size(A, 1)
 
-b_cpu = rand(MAIN_TYPE, SIZE)
-b_gpu = MtlVector(b_cpu)
+A_T_gpu = SparseGPUMatrixCSR(transpose(A), Metal.MetalBackend())
 
-res_ssgb = GBVector(zeros(MAIN_TYPE, SIZE))
-res_gpu_1 = KernelAbstractions.zeros(Metal.MetalBackend(), MAIN_TYPE, SIZE)
-res_gpu_2 = KernelAbstractions.zeros(Metal.MetalBackend(), MAIN_TYPE, SIZE)
-
-Metal.@capture begin
-    for _ = 1:5
-        gpu_spmv!(res_gpu_2, A_csr_gpu, b_gpu)
-    end
-    KernelAbstractions.synchronize(Metal.MetalBackend())
-
-
-    for _ = 1:5
-        gpu_spmv!(res_gpu_1, A_ell_gpu, b_gpu)
-    end
+#Metal.@capture begin
+@benchmark begin
+    bfs(A_T_gpu, 1)
     KernelAbstractions.synchronize(Metal.MetalBackend())
 end
 
@@ -135,25 +119,3 @@ for _ = 1:5
     gpu_spmv!(res_gpu_2, A_csr_gpu, b_gpu)
 end
 KernelAbstractions.synchronize(Metal.MetalBackend())
-
-
-
-
-gpu_spmv!(res_gpu_1, A_gpu_csr, b_gpu, &, |, |)
-KernelAbstractions.synchronize(Metal.MetalBackend())
-mul!(res_ssgb, a_ssgb, b_cpu, (∧, ∨); accum = ∨)
-
-
-
-using Metal
-using KernelAbstractions
-using LinearAlgebra
-BACKEND = Metal.MetalBackend()
-cpu_vec = rand(Float32, 10)
-cpu_vec2 = rand(Float32, 10) * 0.001 + cpu_vec
-
-gpu_vec = KernelAbstractions.zeros(BACKEND, Float32, 10)
-copyto!(gpu_vec, cpu_vec2)
-
-println("diff on cpu: ", norm(cpu_vec2 - cpu_vec))
-println("diff on gpu: ", norm(gpu_vec - cpu_vec))
