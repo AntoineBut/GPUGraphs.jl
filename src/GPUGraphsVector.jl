@@ -25,7 +25,7 @@ mutable struct SparseGPUVector{
     nzval::Gv    # Stored values, typically nonzeros
 
     function SparseGPUVector(
-        n::Int,
+        n::Ti,
         nzind::Gi,
         nzval::Gv,
         backend::B,
@@ -39,19 +39,22 @@ mutable struct SparseGPUVector{
         if length(nzind) != length(nzval)
             throw(ArgumentError("length(nzind) must be equal to length(nzval)"))
         end
+
         if get_backend(nzind) != backend
             nzind_gpu = allocate(backend, Ti, length(nzind))
             copyto!(nzind_gpu, nzind)
         else
             nzind_gpu = nzind
         end
+
         if get_backend(nzval) != backend
             nzval_gpu = allocate(backend, Tv, length(nzval))
             copyto!(nzval_gpu, nzval)
         else
             nzval_gpu = nzval
+
         end
-        new{Tv,Ti,Gv,Gi}(n, nzind_gpu, nzval_gpu)
+        new{Tv,Ti,typeof(nzval_gpu),typeof(nzind_gpu)}(n, nzind_gpu, nzval_gpu)
     end
 end
 
@@ -72,22 +75,27 @@ function SparseGPUVector(::Type{Tv}, ::Type{Ti}, backend) where {Tv,Ti<:Integer}
 end
 
 function SparseGPUVector(
-    n::Int,
     ::Type{Tv},
     ::Type{Ti},
     backend::Backend,
 ) where {Tv,Ti<:Integer}
     nzind = allocate(backend, Ti, 0)
     nzval = allocate(backend, Tv, 0)
-    SparseGPUVector(n, nzind, nzval, backend)
+    SparseGPUVector(zero(Ti), nzind, nzval, backend)
 end
 
 #TODO : Bolean matrix that can omit the values and only store the indices
 
 # Base methods for the SparseGPUVector type
-Base.size(V::SparseGPUVector) = (V.n)
-Base.size(V::SparseGPUVector, i::Int) = (i == 1) ? V.n : 1
+Base.size(V::SparseGPUVector) = (V.n,)
+Base.size(V::SparseGPUVector, i::Int) = (i == 1) ? (V.n,) : (1,)
 Base.length(V::SparseGPUVector) = V.n
+Base.show(io::IO, V::SparseGPUVector) = println(
+    io,
+    "SparseGPUVector{$(eltype(V.nzval))} $(size(V)) - $(nnz(V)) explicit elements",
+)
+Base.display(V::SparseGPUVector) = show(stdout, V)
+
 function Base.getindex(V::SparseGPUVector, i::Int)
     @warn "Scalar indexing on a SparseGPUVector is slow. For better performance, vectorize the operation."
     if i < 1 || i > V.n

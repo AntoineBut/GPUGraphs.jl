@@ -370,7 +370,7 @@ end
     @testset "Constructors" begin
         @testset "empty" begin
             A = SparseGPUVector(Float32, Int32, TEST_BACKEND)
-            @test size(A) == 0
+            @test size(A) == (0,)
             @test length(A) == 0
         end
 
@@ -387,7 +387,7 @@ end
             i = 1
             for B in test_vectors
                 i += 1
-                @test size(B) == 10
+                @test size(B) == (10,)
                 @test length(B) == 10
                 @allowscalar @test B.nzind == ref_nzind
                 @allowscalar @test B.nzval == ref_nzval
