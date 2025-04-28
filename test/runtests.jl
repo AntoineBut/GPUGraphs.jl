@@ -9,6 +9,7 @@ using JuliaFormatter
 using Aqua
 using JET
 using Pkg
+using Graphs
 
 # Test the SparseGPUMatrixCSR utilities
 
@@ -43,4 +44,5 @@ const PAD_VAL = 1
 
     include("structs.jl")
     include("spmv.jl")
+    include("bfs.jl")
 end

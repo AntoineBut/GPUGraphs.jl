@@ -29,7 +29,10 @@ export AbstractSparseGPUMatrix,
     gpu_spmv!,
     sprand_gpu,
     monoid_neutral,
-    bfs,
-    bfs!
+    bfs_distances,
+    bfs_distances!,
+    GPUGraphs_add,
+    GPUGraphs_mul,
+    GPUGraphs_second
 
 end

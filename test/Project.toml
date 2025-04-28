@@ -2,6 +2,7 @@
 Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 GPUArrays = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
 GPUGraphs = "fd5a6e86-c761-4989-bab7-5b3464417f6b"
+Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
 JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
 JuliaFormatter = "98e50ef6-434e-11e9-1051-2b60c6c9e899"
 KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
