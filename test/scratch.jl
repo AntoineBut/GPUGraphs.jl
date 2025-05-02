@@ -104,18 +104,18 @@ using GraphIO.EdgeList
 
 MAIN_TYPE = Bool
 graph = SimpleGraph(loadgraph("benchmark/data/com-Orkut/com-Orkut.mtx", EdgeListFormat()))
-A = adjacency_matrix(graph, MAIN_TYPE; dir = :out)
+A = convert(SparseMatrixCSC{MAIN_TYPE,Int32}, adjacency_matrix(graph, MAIN_TYPE; dir = :out))
 SIZE = size(A, 1)
 
 A_T_gpu = SparseGPUMatrixCSR(transpose(A), Metal.MetalBackend())
 
 #Metal.@capture begin
 @benchmark begin
-    bfs(A_T_gpu, 1)
+    bfs_distances(A_T_gpu, Int32(1))
     KernelAbstractions.synchronize(Metal.MetalBackend())
 end
+#end
 
-for _ = 1:5
-    gpu_spmv!(res_gpu_2, A_csr_gpu, b_gpu)
+@benchmark begin
+    gdistances(graph, 1)
 end
-KernelAbstractions.synchronize(Metal.MetalBackend())

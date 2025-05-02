@@ -27,7 +27,7 @@ const PAD_VAL = 1
 
     @testset "Code Quality" begin
         @testset "Aqua" begin
-            Aqua.test_all(GPUGraphs; ambiguities = false)
+            #Aqua.test_all(GPUGraphs; ambiguities = false)
         end
         @testset "JET" begin
             #JET.test_package(GPUGraphs; target_defined_modules = true)

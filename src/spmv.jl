@@ -11,7 +11,7 @@
     add,
     accum,
 )
-    # Computes A*B and stores the result in C using the semiring semiring.
+    # Computes A*B and stores the result in C
     row = @index(Global, Linear)
     acc = monoid_neutral_element
     for i = a_row_ptr[row]:a_row_ptr[row+1]-1
@@ -21,7 +21,7 @@
     c[row] = accum(c[row], acc, row, 1, row, 1)
 end
 
-@kernel function masked_csr_spmv_kernel!(
+@kernel function sparse_masked_csr_spmv_kernel!(
     c,
     @Const(a_row_ptr),
     @Const(a_col_val),
@@ -33,7 +33,7 @@ end
     add,
     accum,
 )
-    # Computes A*B and stores the result in C using the semiring semiring.
+    # Computes A*B and stores the result in C
     entry_nb = @index(Global, Linear)
     row = mask[entry_nb]
     acc = monoid_neutral_element
@@ -44,16 +44,42 @@ end
     c[row] = accum(c[row], acc, row, 1, row, 1)
 end
 
+@kernel function dense_masked_csr_spmv_kernel!(
+    c,
+    @Const(a_row_ptr),
+    @Const(a_col_val),
+    @Const(a_nz_val),
+    @Const(b),
+    @Const(monoid_neutral_element),
+    @Const(mask),
+    @Const(mask_zero),
+    mul,
+    add,
+    accum,
+)
+    # Computes A*B and stores the result in C
+    row = @index(Global, Linear)
+    if mask[row] != mask_zero
+        acc = monoid_neutral_element
+        for i = a_row_ptr[row]:a_row_ptr[row+1]-1
+            col = a_col_val[i]
+            acc = add(acc, mul(a_nz_val[i], b[col], row, col, col, 1), row, col, col, 1)
+        end
+        c[row] = accum(c[row], acc, row, 1, row, 1)
+    end
+end
+
+
 function gpu_spmv!(
-    C::AV,
+    C::ResVec,
     A::SparseGPUMatrixCSR{Tv,Ti},
-    B::AV;
+    B::InputVec;
     mul::Function = GPUGraphs_mul,
     add::Function = GPUGraphs_add,
     accum::Function = GPUGraphs_second,
-    mask::Union{SparseGPUVector{Bool,Ti}, Nothing} = nothing,
-) where {Tv,Ti,AV<:AbstractVector{Tv}}
-    # Computes A*B and stores the result in C using the semiring semiring.
+    mask::Union{MaskVec, Nothing} = nothing,
+) where {Tv,Ti<:Integer, Tmask<:Integer, ResType<:Number, InputType<:Number, ResVec<:AbstractVector{ResType}, InputVec<:AbstractVector{InputType}, MaskVec<:AbstractVector{Tmask}}
+    # Computes A*B and stores the result in C
     # Check dimensions
     if size(A, 2) != length(B)
         throw(DimensionMismatch("Matrix dimensions must agree"))
@@ -63,8 +89,40 @@ function gpu_spmv!(
     end
     # Call the kernel
     backend = get_backend(C)
-    if mask !== nothing
-        kernel! = masked_csr_spmv_kernel!(backend)
+
+    # No mask
+    if mask === nothing
+        kernel! = csr_spmv_kernel!(backend)
+        kernel!(
+            C,
+            A.rowptr,
+            A.colval,
+            A.nzval,
+            B,
+            monoid_neutral(Tv, add),
+            mul,
+            add,
+            accum;
+            ndrange = size(A, 1),
+        )
+        return
+    end
+    # Check mask type
+    if !(typeof(mask) <: AbstractVector{Tmask})
+        throw(DimensionMismatch("Mask must be a vector"))
+    end
+    # Check mask length
+    if length(mask) != size(A, 1)
+        throw(DimensionMismatch("Mask length must be equal to the number of rows in A"))
+    end
+    # Check mask backend
+    if get_backend(mask) != backend
+        throw(ArgumentError("Mask must be on the same backend as A"))
+    end
+
+    # SparseVector mask 
+    if typeof(mask) <: AbstractSparseGPUVector{Tmask,Ti}
+        kernel! = sparse_masked_csr_spmv_kernel!(backend)
         kernel!(
             C,
             A.rowptr,
@@ -81,19 +139,26 @@ function gpu_spmv!(
         return
     end
 
-    kernel! = csr_spmv_kernel!(backend)
-    kernel!(
-        C,
-        A.rowptr,
-        A.colval,
-        A.nzval,
-        B,
-        monoid_neutral(Tv, add),
-        mul,
-        add,
-        accum;
-        ndrange = size(A, 1),
-    )
+    # DenseVector mask
+    if typeof(mask) <: AbstractVector{Tmask}
+        kernel! = dense_masked_csr_spmv_kernel!(backend)
+        kernel!(
+            C,
+            A.rowptr,
+            A.colval,
+            A.nzval,
+            B,
+            monoid_neutral(Tv, add),
+            mask,
+            zero(Tmask),
+            mul,
+            add,
+            accum;
+            ndrange = size(A, 1),
+        )
+        return
+    end
+
 end
 
 
@@ -108,7 +173,7 @@ end
     add,
     accum,
 )
-    # Computes A*B and stores the result in C using the semiring semiring.
+    # Computes A*B and stores the result in C
     col = @index(Global, Linear)
     acc = monoid_neutral_element
     for i = a_col_ptr[col]:a_col_ptr[col+1]-1
@@ -126,7 +191,7 @@ function gpu_spmv!(
     add::Function = GPUGraphs_add,
     accum::Function = GPUGraphs_second,
 ) where {Tv,Ti,AV<:AbstractVector{Tv}}
-    # Computes A*B and stores the result in C using the semiring semiring.
+    # Computes A*B and stores the result in C
     # Check dimensions
     if size(A, 2) != length(B)
         throw(DimensionMismatch("Matrix dimensions must agree"))
@@ -183,7 +248,7 @@ function gpu_spmv!(
     add::Function = GPUGraphs_add,
     accum::Function = GPUGraphs_second,
 ) where {Tv,Ti,AV<:AbstractVector{Tv}}
-    # Computes A*B and stores the result in C using the semiring semiring.
+    # Computes A*B and stores the result in C
     # Check dimensions
     if size(A, 2) != length(B)
         throw(DimensionMismatch("Matrix dimensions must agree"))
