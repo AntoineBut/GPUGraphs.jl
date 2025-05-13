@@ -70,7 +70,7 @@ end
     # Matrix-vector multiplication
     A_cpu = sprand(Float32, 10, 10, 0.5)
     B_cpu = rand(Float32, 10)
-    
+
     res = zeros(Float32, 10)
     A_gpu_ell = SparseGPUMatrixELL(A_cpu, TEST_BACKEND)
     A_gpu_csr = SparseGPUMatrixCSR(A_cpu, TEST_BACKEND)

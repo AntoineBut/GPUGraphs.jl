@@ -324,7 +324,7 @@ Base.size(A::SparseGPUMatrixELL, i::Int) = (i == 1) ? A.m : A.n
 Base.length(A::SparseGPUMatrixELL) = A.m * A.n
 Base.show(io::IO, A::SparseGPUMatrixELL) = println(
     io,
-    "SparseGPUMatrixELL{$(eltype(A.nzval))}($(size(A, 1)), $(size(A, 2))) - $(nnz(A)) explicit elements",
+    "SparseGPUMatrixELL{$(eltype(A.nzval)) - $(eltype(A.colval))}($(size(A, 1)), $(size(A, 2))) - $(nnz(A)) explicit elements",
 )
 Base.display(A::SparseGPUMatrixELL) = show(stdout, A)
 

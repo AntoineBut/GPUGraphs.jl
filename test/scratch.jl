@@ -88,15 +88,16 @@ res_gpu3 = KernelAbstractions.zeros(BACKEND, Bool, SIZE)
 gpu_spmv!(res_gpu1, A_ell_gpu, b_gpu, &, |, |)
 KernelAbstractions.synchronize(BACKEND)
 
-
+using SuiteSparseGraphBLAS
+import SuiteSparseGraphBLAS: ∧, ∨
+using ParallelGraphs
 
 
 using GPUGraphs
 using BenchmarkTools
 using Metal
 using KernelAbstractions
-using SuiteSparseGraphBLAS
-import SuiteSparseGraphBLAS: ∧, ∨
+
 
 using Graphs
 using GraphIO.EdgeList
@@ -104,18 +105,44 @@ using GraphIO.EdgeList
 
 MAIN_TYPE = Bool
 graph = SimpleGraph(loadgraph("benchmark/data/com-Orkut/com-Orkut.mtx", EdgeListFormat()))
-A = convert(SparseMatrixCSC{MAIN_TYPE,Int32}, adjacency_matrix(graph, MAIN_TYPE; dir = :out))
+#graph = dorogovtsev_mendes(10)
+A = convert(
+    SparseMatrixCSC{MAIN_TYPE,Int32},
+    adjacency_matrix(graph, MAIN_TYPE; dir = :out),
+)
 SIZE = size(A, 1)
 
 A_T_gpu = SparseGPUMatrixCSR(transpose(A), Metal.MetalBackend())
+A_T = GBMatrix{Bool}((adjacency_matrix(graph, Bool; dir=:in))) 
 
-#Metal.@capture begin
-@benchmark begin
-    bfs_distances(A_T_gpu, Int32(1))
+p = GBVector{Int}(SIZE; fill=zero(Int))
+
+Metal.@capture begin
+#@benchmark begin
+    GPUGraphs.bfs_distances(A_T_gpu, Int32(1))
+    KernelAbstractions.synchronize(Metal.MetalBackend())
+    GPUGraphs.bfs_parents(A_T_gpu, Int32(1))
     KernelAbstractions.synchronize(Metal.MetalBackend())
 end
 #end
 
 @benchmark begin
+    GPUGraphs.bfs_distances(A_T_gpu, Int32(1))
+    KernelAbstractions.synchronize(Metal.MetalBackend())
+end 
+
+@benchmark begin
+    GPUGraphs.bfs_parents(A_T_gpu, Int32(1))
+    KernelAbstractions.synchronize(Metal.MetalBackend())
+end
+
+@benchmark begin
     gdistances(graph, 1)
 end
+@benchmark begin
+    Graphs.bfs_parents(graph, 1)
+end
+
+@benchmark begin
+    ParallelGraphs.bfs_BLAS!(A_T, 1, p)
+end setup = (p = GBVector{Int}(SIZE; fill=zero(Int)))

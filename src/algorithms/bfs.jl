@@ -1,7 +1,7 @@
 function bfs_distances(
     A_T::TM,
     source::Ti;
-    use_mask=true,
+    use_mask = true,
 ) where {Tv,Ti<:Integer,TM<:AbstractSparseGPUMatrix{Tv,Ti}}
     backend = get_backend(A_T)
 
@@ -34,7 +34,7 @@ function bfs_distances!(
     dist::TVi,
     curr::TVv,
     next::TVv,
-    to_explore::TVv
+    to_explore::TVv,
 ) where {
     Tv,
     Ti<:Integer,
@@ -49,16 +49,23 @@ function bfs_distances!(
     next .= zero(Tv)
 
     while true
-        iter += one(Ti)        
-        gpu_spmv!(next, A_T, curr, mul=GPUGraphs_band, add=GPUGraphs_bor, mask=to_explore)
+        iter += one(Ti)
+        gpu_spmv!(
+            next,
+            A_T,
+            curr,
+            mul = GPUGraphs_band,
+            add = GPUGraphs_bor,
+            mask = to_explore,
+        )
         if reduce(|, next) == zero(Tv)
             return nothing
         end
-        # Update the dist array where curr is not zero and dist is zero
-        dist .= ifelse.(next .== one(Tv), iter, dist)
+        # Update the dist array where next is not zero
+        @. dist = ifelse(next == one(Tv), iter, dist)
 
         # set to_explore to false for the newly explored nodes
-        to_explore .= to_explore .& (next .== zero(Tv))
+        @. to_explore = to_explore & (next == zero(Tv))
         # set curr to next
         curr .= next
         next .= zero(Tv)
@@ -72,7 +79,7 @@ function no_mask_bfs_distances!(
     dist::TVi,
     curr::TVv,
     next::TVv,
-    to_explore::TVv
+    to_explore::TVv,
 ) where {
     Tv,
     Ti<:Integer,
@@ -87,8 +94,8 @@ function no_mask_bfs_distances!(
     next .= zero(Tv)
 
     while true
-        iter += one(Ti)        
-        gpu_spmv!(next, A_T, curr, mul=GPUGraphs_band, add=GPUGraphs_bor)
+        iter += one(Ti)
+        gpu_spmv!(next, A_T, curr, mul = GPUGraphs_band, add = GPUGraphs_bor)
         curr .= next .& to_explore
         if reduce(|, curr) == zero(Tv)
             return nothing
@@ -100,6 +107,72 @@ function no_mask_bfs_distances!(
         to_explore .= to_explore .& (curr .== zero(Tv))
         # set curr to next
         next .= zero(Tv)
+    end
+    return nothing
+end
+
+function bfs_parents(
+    A_T::TM,
+    source::Ti;
+) where {Tv,Ti<:Integer,TM<:AbstractSparseGPUMatrix{Tv,Ti}}
+    backend = get_backend(A_T)
+
+    # Tv is typically Bool
+    curr = KernelAbstractions.zeros(backend, Tv, size(A_T, 1))
+    next = KernelAbstractions.zeros(backend, Ti, size(A_T, 1))
+    to_explore = KernelAbstractions.ones(backend, Tv, size(A_T, 1))
+
+    # Ti is typically Int32, and is guaranteed to be able to hold the size of the matrix
+    # and the maximum value of the distance
+    parents = KernelAbstractions.allocate(backend, Ti, size(A_T, 1))
+
+    parents .= typemax(Ti)
+
+    bfs_parents!(A_T, source, parents, curr, next, to_explore)
+    return parents
+end
+
+function bfs_parents!(
+    A_T::TM,
+    source::Ti,
+    parents::TVi,
+    curr::TVv,
+    next::TVi,
+    to_explore::TVv,
+) where {
+    Tv,
+    Ti<:Integer,
+    TVv<:AbstractVector{Tv},
+    TVi<:AbstractVector{Ti},
+    TM<:AbstractSparseGPUMatrix{Tv,Ti},
+}
+    @allowscalar curr[source] = one(Tv)
+    @allowscalar parents[source] = zero(Ti)
+    @allowscalar to_explore[source] = zero(Tv)
+    next .= zero(Ti)
+    iter = zero(Ti)
+
+    while true
+        iter += one(Ti)
+        gpu_spmv!(
+            next,
+            A_T,
+            curr,
+            mul = GPUGraphs_secondi,
+            add = GPUGraphs_any,
+            mask = to_explore,
+        )
+        # set curr to true for the next nodes
+        @. curr = next != zero(Ti)
+        if !any(curr)
+            return nothing
+        end
+        # Fill the parents array where next is not zero
+        @. parents = ifelse(curr != zero(Tv), next, parents)
+
+        # set to_explore to false for the newly explored nodes
+        @. to_explore = to_explore & (curr == zero(Tv))
+        next .= zero(Ti)
     end
     return nothing
 end

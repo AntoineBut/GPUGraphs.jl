@@ -74,11 +74,7 @@ function SparseGPUVector(::Type{Tv}, ::Type{Ti}, backend) where {Tv,Ti<:Integer}
     SparseGPUVector(0, Tv, Ti, backend)
 end
 
-function SparseGPUVector(
-    ::Type{Tv},
-    ::Type{Ti},
-    backend::Backend,
-) where {Tv,Ti<:Integer}
+function SparseGPUVector(::Type{Tv}, ::Type{Ti}, backend::Backend) where {Tv,Ti<:Integer}
     nzind = allocate(backend, Ti, 0)
     nzval = allocate(backend, Tv, 0)
     SparseGPUVector(zero(Ti), nzind, nzval, backend)

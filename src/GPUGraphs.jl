@@ -29,10 +29,18 @@ export AbstractSparseGPUMatrix,
     gpu_spmv!,
     sprand_gpu,
     monoid_neutral,
+    monoid_absorb,
     bfs_distances,
     bfs_distances!,
+    bfs_parents,
+    bfs_parents!,
     GPUGraphs_add,
     GPUGraphs_mul,
-    GPUGraphs_second
+    GPUGraphs_second,
+    GPUGraphs_band,
+    GPUGraphs_bor,
+    GPUGraphs_any,
+    GPUGraphs_secondi,
+    GPUGraphs_max
 
 end
