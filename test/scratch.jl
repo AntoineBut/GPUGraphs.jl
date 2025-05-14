@@ -145,4 +145,4 @@ end
 
 @benchmark begin
     ParallelGraphs.bfs_BLAS!(A_T, 1, p)
-end setup = (p = GBVector{Int}(SIZE; fill=zero(Int)))
+end eval = 1 setup = (p = GBVector{Int}(SIZE; fill=zero(Int)))

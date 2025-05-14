@@ -72,7 +72,7 @@ end
         acc = monoid_neutral_element
         for i = a_row_ptr[row]:a_row_ptr[row+1]-1
             col = a_col_val[i]
-            acc = add(acc, mul(true, b[col], row, col, col, 1), row, col, col, 1)
+            acc = add(acc, mul(a_nz_val[i], b[col], row, col, col, 1), row, col, col, 1)
             if acc == terminal_value
                 break
             end
@@ -99,7 +99,7 @@ end
             col = a_col_val[i]
             b_val = b[col]
             if b_val != zero(b_val)
-                c[row] = accum(c[row], mul(true, b_val, row, col, col, 1), row, 1, row, 1)
+                c[row] = accum(c[row], mul(a_nz_val[i], b_val, row, col, col, 1), row, 1, row, 1)
                 break
             end
         end

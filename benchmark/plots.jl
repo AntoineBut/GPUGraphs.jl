@@ -4,8 +4,10 @@ using DataFrames
 
 # Load the data. Columns are operation, size, implementation, time
 df = DataFrame(CSV.File("benchmark/out/spmv_results.csv"))
+df_bfs = DataFrame(CSV.File("benchmark/out/bfs_results.csv"))
 
 df[!, :time] /= 1e9  # convert ns to s
+df_bfs[!, :time] /= 1e9  # convert ns to s
 
 # Plot the data
 p = @df df plot(
@@ -24,17 +26,33 @@ p = @df df plot(
 
 
     # log Y scale 
-
-
 )
 display(p)
-
+#"""
+# Plot the BFS data
+p_bfs = @df df_bfs plot(
+    :size,
+    :time,
+    group = :implementation,
+    markershape = [:utriangle :x :circle :square],
+    xlabel = "Size",
+    ylabel = "Time (s)",
+    title = "BFS",
+    legend = :topleft,
+    yscale = :log10,
+    xscale = :log10,
+    yticks = [10^i for i in -6.0:1.0],
+    ylim = (1e-5, 1e+1),
+)
+display(p_bfs)
+#"""
 # Plot the speedup relative to the SuiteSparseGraphBLAS implementation
 
-# Get the SuiteSparseGraphBLAS times
+# Get the times
 ssgb_times = df[df.implementation.=="SuiteSparseGraphBLAS", :time]
 csr_gpu_times = df[df.implementation.=="GPUGraphsCSR", :time]
 ell_gpu_times = df[df.implementation.=="GPUGraphsELL", :time]
+
 
 
 # Calculate the speedup
@@ -48,17 +66,47 @@ speedup_plot = plot(
     label = ["CSR" "ELL"],
     xlabel = "Size",
     ylabel = "Speedup",
-    title = "Speedup of GPUGraphs relative to SSBG",
+    title = "Speedup of GPUGraphs SPMV relative to SSBG",
     legend = true,
     xscale = :log2,
     xticks = [2^i for i = 1:30],
     markershape = [:utriangle :x :circle :square],
 )
 display(speedup_plot)
+#"""
+# Get the times
+graphsjl_times = df_bfs[df_bfs.implementation.=="Graphs.jl", :time]
 
+ssgb_times = df_bfs[df_bfs.implementation.=="SuiteSparseGraphBLAS", :time]
+csr_gpu_times = df_bfs[df_bfs.implementation.=="GPUGraphsCSR", :time]
+ell_gpu_times = df_bfs[df_bfs.implementation.=="GPUGraphsELL", :time]
+
+# Calculate the speedup
+speedup_ssgb = graphsjl_times ./ ssgb_times
+speedup_csr_bfs = graphsjl_times ./ csr_gpu_times
+#speedup_ell_bfs = graphsjl_times ./ ell_gpu_times
+
+# Plot the speedup
+speedup_plot_bfs = plot(
+    unique(df_bfs.size),
+    [speedup_csr_bfs, speedup_ssgb],
+    label = ["CSR" "SuiteSparseGraphBLAS"],
+    xlabel = "Size",
+    ylabel = "Speedup",
+    title = "Speedup of GraphBLAS BFS relative to Graphs.jl",
+    legend = true,
+    xscale = :log2,
+    xticks = [2^i for i = 1:30],
+    markershape = [:utriangle :x :circle :square],
+)
+display(speedup_plot_bfs)
+#"""
 
 df2 = DataFrame(CSV.File("benchmark/out/spmv_results_data.csv"))
 df2[!, :time] /= 1e9  # convert ns to s
+
+df2_bfs = DataFrame(CSV.File("benchmark/out/bfs_results_data.csv"))
+df2_bfs[!, :time] /= 1e9  # convert ns to s
 
 # For each dataset, normalize the time by the time of the SuiteSparseGraphBLAS implementation
 gb_times = df2[df2.implementation.=="SuiteSparseGraphBLAS", :time]
@@ -87,8 +135,47 @@ annotate!(3, 0.2, text("$(round(speedups[3], digits = 2))x \n", :black, 8, :cent
 annotate!(5, 0.2, text("$(round(speedups[5], digits = 2))x \n", :black, 8, :center))
 annotate!(6, 0.2, text("$(round(speedups[6], digits = 2))x \n", :black, 8, :center))
 annotate!(8, 0.2, text("$(round(speedups[8], digits = 2))x \n", :black, 8, :center))
+annotate!(9, 0.2, text("$(round(speedups[9], digits = 2))x \n", :black, 8, :center))
 
 display(p2)
+
+#"""
+# Plot the BFS data
+# For each dataset, normalize the time by the time of the SuiteSparseGraphBLAS implementation
+graphsjl_times_bfs = df2_bfs[df2_bfs.implementation.=="Graphs.jl", :time]
+graphsjl_times_column_bfs = repeat(graphsjl_times_bfs, inner = 4)
+# Normalize the time by the SuiteSparseGraphBLAS time
+df2_bfs[!, :time] = df2_bfs[!, :time] ./ graphsjl_times_column_bfs
+# Plot the data as 4 bar plots (one for each dataset), with the x-axis as the implementation, and the y-axis as the time
+p2_bfs = @df df2_bfs bar(
+    1:nrow(df2_bfs),
+    :time,
+    group = :implementation,
+    bar_width = 1,
+    ylabel = "Time (relative to Graphs.jl)",
+    xlabel = "Implementation",
+    xticks = (2:4:13, unique(df2_bfs.dataset)),
+    legend = :topleft,
+    title = "BFS",
+    ylim = (0, 1),
+
+)
+# Add the speedup
+speedups_bfs = 1 ./ df2_bfs[!, :time]
+speedups_bfs[4] = 1.0
+annotate!(2, 0.2, text("$(round(speedups_bfs[2], digits = 2))x \n", :black, 8, :center))
+annotate!(3, 0.2, text("$(round(speedups_bfs[3], digits = 2))x \n", :black, 8, :center))
+annotate!(4, 0.2, text("$(round(speedups_bfs[4], digits = 2))x \n", :black, 8, :center))
+
+annotate!(6, 0.2, text("$(round(speedups_bfs[6], digits = 2))x \n", :black, 8, :center))
+annotate!(7, 0.2, text("$(round(speedups_bfs[7], digits = 2))x \n", :black, 8, :center))
+annotate!(8, 0.2, text("$(round(speedups_bfs[8], digits = 2))x \n", :black, 8, :center))
+
+annotate!(10, 0.2, text("$(round(speedups_bfs[10], digits = 2))x \n", :black, 8, :center))
+annotate!(11, 0.2, text("$(round(speedups_bfs[11], digits = 2))x \n", :black, 8, :center))
+annotate!(12, 0.2, text("$(round(speedups_bfs[12], digits = 2))x \n", :black, 8, :center))
+display(p2_bfs)
+#"""
 # Save the plots
 savefig(p, "benchmark/out/plot_spmv_results.png")
 savefig(speedup_plot, "benchmark/out/plot_spmv_speedup.png")

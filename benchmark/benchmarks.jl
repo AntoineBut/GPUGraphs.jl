@@ -9,28 +9,33 @@ using DataFrames
 using CSV
 using Graphs
 using GraphIO.EdgeList
+using SuiteSparseMatrixCollection
+using HarwellRutherfordBoeing
+using ParallelGraphs
 
 
 SUITE = BenchmarkGroup()
-MAIN_TYPE = Int32
+MAIN_TYPE = Bool
+BOOL_TYPE = Bool
 INDEX_TYPE = Int32
+INDEX_SSGB = Int
 
 ELTYPE_A = MAIN_TYPE
 ELTYPE_B = MAIN_TYPE
 ELTYPE_RES = MAIN_TYPE
 
-MUL = *
-ADD = +
-ACCUM = +
+MUL = GPUGraphs_mul
+ADD = GPUGraphs_add
+ACCUM = GPUGraphs_second
 ACCUM_SSGB = +
-SEMIRING = semiring(*, +, MAIN_TYPE, MAIN_TYPE)
+SEMIRING = semiring(+, *, MAIN_TYPE, MAIN_TYPE)
 
 if MAIN_TYPE == Bool
-    MUL = &
-    ADD = |
-    ACCUM = |
-    SEMIRING = semiring(∧, ∨, Bool, Bool)
+    MUL = GPUGraphs_band
+    ADD = GPUGraphs_bor
+    ACCUM = GPUGraphs_second
     ACCUM_SSGB = ∨
+    SEMIRING = semiring(∨, ∧, MAIN_TYPE, MAIN_TYPE)
 end
 
 
@@ -40,16 +45,21 @@ BACKEND = Metal.MetalBackend()  # our personal laptops
 n_cpu_threads = Sys.CPU_THREADS
 gbset(:nthreads, n_cpu_threads)
 
-SIZES = [16384 * 2^i for i = 1:8]
+SIZES = [16384 * 2^i for i = 1:6]
+#SIZES = []
 NB_ELEMS = 40 # Average number of non-zero elements per column
 NNZ = SIZES .* NB_ELEMS
 MUL_RESULTS =
     DataFrame(operation = String[], size = Int[], implementation = String[], time = Real[])
 
+BFS_RESULTS =
+    DataFrame(operation = String[], size = Int[], implementation = String[], time = Real[])
+
 for SIZE in SIZES
     FILL = NB_ELEMS / SIZE
     print("Generating random sparse matrix of size $SIZE x $SIZE with fill $FILL\n")
-    A_csc_cpu = sprand(ELTYPE_A, SIZE, SIZE, FILL)
+    A_csc_cpu =
+        convert(SparseMatrixCSC{MAIN_TYPE,INDEX_TYPE}, sprand(MAIN_TYPE, SIZE, SIZE, FILL))
     A_csr_cpu = transpose(A_csc_cpu)
     print("Converting to GPU format\n")
     A_csr_gpu = SparseGPUMatrixCSR(A_csr_cpu, BACKEND)
@@ -65,11 +75,11 @@ for SIZE in SIZES
         for i = 1:10
             mul!(res_ssGB, $A_ssGB, $b_ssGB, SEMIRING; accum = ACCUM_SSGB)
         end
-    end evals = 1 setup = (res_ssGB = GBVector(zeros(ELTYPE_RES, $SIZE)))
+    end evals = 1 setup = (res_ssGB = GBVector{INDEX_TYPE}($SIZE, fill = zero(INDEX_TYPE)))
 
     SUITE["mul!"]["GPU"]["GPUGraphsCSR"] = @benchmarkable begin
         for i = 1:10
-            gpu_spmv!(res_gpu, $A_csr_gpu, $b_gpu, MUL, ADD, ACCUM)
+            gpu_spmv!(res_gpu, $A_csr_gpu, $b_gpu; mul = MUL, add = ADD, accum = ACCUM)
         end
         KernelAbstractions.synchronize(BACKEND)
     end evals = 1 setup =
@@ -77,13 +87,51 @@ for SIZE in SIZES
 
     SUITE["mul!"]["GPU"]["GPUGraphsELL"] = @benchmarkable begin
         for i = 1:10
-            gpu_spmv!(res_gpu, $A_ell_gpu, $b_gpu, MUL, ADD, ACCUM)
+            gpu_spmv!(res_gpu, $A_ell_gpu, $b_gpu; mul = MUL, add = ADD, accum = ACCUM)
         end
         KernelAbstractions.synchronize(BACKEND)
     end evals = 1 setup =
         (res_gpu = KernelAbstractions.zeros(BACKEND, ELTYPE_RES, $SIZE))
 
-    print("Launching benchmarks\n")
+    if MAIN_TYPE == Bool
+        # BFS for bool
+        GSIZE = SIZE * 16
+        print("Generating random graph of size $GSIZE \n")
+        graph = dorogovtsev_mendes(GSIZE)
+        A_csc_cpu =
+            convert(SparseMatrixCSC{MAIN_TYPE,INDEX_TYPE}, adjacency_matrix(graph, MAIN_TYPE; dir = :out))
+        A_csr_cpu = transpose(A_csc_cpu)
+        print("Converting to GPU-CSR format\n")
+        A_csr_gpu = SparseGPUMatrixCSR(A_csr_cpu, BACKEND)
+        #print("Converting to ELL format\n")
+        #A_ell_gpu = SparseGPUMatrixELL(A_csr_cpu, BACKEND)
+
+        print("Building GB sparse matrix\n")
+        A_ssGB = GBMatrix(
+            convert(SparseMatrixCSC{MAIN_TYPE,INDEX_SSGB}, adjacency_matrix(graph, Bool; dir = :out))
+        )
+
+        SUITE["bfs"]["CPU"]["Graphs.jl"] = @benchmarkable begin
+            Graphs.bfs_parents($graph, one(INDEX_TYPE))
+        end evals = 1
+
+        SUITE["bfs"]["GPU"]["GPUGraphsCSR"] = @benchmarkable begin
+            GPUGraphs.bfs_parents($A_csr_gpu, one(INDEX_TYPE))
+            KernelAbstractions.synchronize(BACKEND)
+        end evals = 1
+"""
+        SUITE["bfs"]["GPU"]["GPUGraphsELL"] = @benchmarkable begin
+            GPUGraphs.bfs_parents(*A_ell_gpu, one(INDEX_TYPE))
+            KernelAbstractions.synchronize(BACKEND)
+        end evals = 1
+""" 
+        SUITE["bfs"]["CPU"]["SuiteSparseGraphBLAS"] = @benchmarkable begin
+            bfs_BLAS!($A_ssGB, one(INDEX_TYPE), res_ssGB)
+        end evals = 1 setup = (res_ssGB = GBVector{INDEX_TYPE}($GSIZE, fill = zero(INDEX_TYPE)))
+    end
+
+
+    println("Launching benchmarks\n")
     bench_res = run(SUITE)
 
     push!(
@@ -115,22 +163,83 @@ for SIZE in SIZES
         ),
     )
 
+    if MAIN_TYPE == Bool
+        push!(
+            BFS_RESULTS,
+            (
+                "bfs",
+                SIZE,
+                "Graphs.jl",
+                median(bench_res["bfs"]["CPU"]["Graphs.jl"].times),
+            ),
+        )
+        push!(
+            BFS_RESULTS,
+            (
+                "bfs",
+                SIZE,
+                "GPUGraphsCSR",
+                median(bench_res["bfs"]["GPU"]["GPUGraphsCSR"].times),
+            ),
+        )
+"""
+        push!(
+            BFS_RESULTS,
+            (
+                "bfs",
+                SIZE,
+                "GPUGraphsELL",
+                median(bench_res["bfs"]["GPU"]["GPUGraphsELL"].times),
+            ),
+        )
+            """
+        push!(
+            BFS_RESULTS,
+            (
+                "bfs",
+                SIZE,
+                "SuiteSparseGraphBLAS",
+                median(bench_res["bfs"]["CPU"]["SuiteSparseGraphBLAS"].times),
+            ),
+        )
+    end
+    println("Done with size $SIZE")
 end
+println("Results for synthetic data")
 println(MUL_RESULTS)
+println("------")
+println(BFS_RESULTS)
+println("Done. ")
+
 
 # Save results to a file
 
 CSV.write("benchmark/out/spmv_results.csv", MUL_RESULTS)
-#throw("Done. ")
+CSV.write("benchmark/out/bfs_results.csv", BFS_RESULTS)
 NB_DATASETS = 3
-DATASET_NAMES = ["OSM", "NLP-KKT", "Orkut"]
+
+ssmc = ssmc_db()
+orkut_path = fetch_ssmc(ssmc_matrices(ssmc, "SNAP", "Orkut"), format="RB")
+live_journal_path = fetch_ssmc(ssmc_matrices(ssmc, "SNAP", "com-LiveJournal"), format="RB")
+osm_path = fetch_ssmc(ssmc_matrices(ssmc, "DIMACS10", "italy_osm"), format="RB") 
+nlpkkt_path = fetch_ssmc(ssmc_matrices(ssmc, "Schenk", "nlpkkt160"), format="RB")
+
+DATASET_NAMES = ["com-Orkut", "com-LiveJournal", "italy_osm", "nlpkkt160"]
 DATASET_PATHS = [
-    "benchmark/data/italy_osm/italy_osm.mtx",
-    "benchmark/data/nlpkkt160/nlpkkt160-bool.mtx",
-    "benchmark/data/com-Orkut/com-Orkut.mtx",
+    orkut_path[1],
+    live_journal_path[1],
+    osm_path[1],
+    nlpkkt_path[1],
 ]
 
-DATA_RESULTS = DataFrame(
+DATA_MUL_RESULTS = DataFrame(
+    operation = String[],
+    dataset = String[],
+    implementation = String[],
+    time = Real[],
+)
+
+DATA_BFS_RESULTS = DataFrame(
     operation = String[],
     dataset = String[],
     implementation = String[],
@@ -141,56 +250,113 @@ for i = 1:NB_DATASETS
 
     println("Loading graph data for dataset $(DATASET_NAMES[i])")
     # Load dataset
+    loaded_matrix = RutherfordBoeingData(joinpath(DATASET_PATHS[i], "$(DATASET_NAMES[i]).rb"))
+    println("Loaded. ")
 
-    A_T = adjacency_matrix(
-        SimpleGraph(loadgraph(DATASET_PATHS[i], EdgeListFormat())),
-        MAIN_TYPE;
-        dir = :in,
-    )
-    println("Done. ")
-
-    SIZE = size(A_T, 1)
-    A_csr_gpu = SparseGPUMatrixCSR(transpose(A_T), Metal.MetalBackend())
-    A_ssGB = GBMatrix{MAIN_TYPE}(A_T)
-
-    if i != 3
-        A_ell_gpu = SparseGPUMatrixELL(transpose(A_T), Metal.MetalBackend())
+    if i == 3 && MAIN_TYPE <: Integer 
+        # nlpkkt160 is a float matrix, we need to convert it to a bool matrix 
+        loaded_matrix.data.nzval .= 1.0
     end
 
+    A_T = adjacency_matrix(SimpleDiGraph(loaded_matrix.data), Bool; dir = :both)
+    A_T = convert(
+        SparseMatrixCSC{MAIN_TYPE,INDEX_TYPE},
+        A_T,
+    )
+    println("Converted to CSC.")
+
+    SIZE = size(A_T, 1)
+    A_csr_gpu = SparseGPUMatrixCSR(transpose(A_T), BACKEND)
+    println("Converted to GPU-CSR.")
+
+    A_ssGB = GBMatrix(convert(
+                    SparseMatrixCSC{MAIN_TYPE,INDEX_SSGB},
+                    A_T)
+                    )
+    println("Converted to GBMatrix.")
+
+    graph = SimpleGraph(SimpleDiGraph(A_T))
+    println("Built graph. ")
+
+    if i != 1
+        A_ell_gpu = SparseGPUMatrixELL(transpose(A_T), BACKEND)
+    end
     b = rand(MAIN_TYPE, SIZE)
     b_ssGB = b
     b_gpu = MtlVector(b)
 
     SUITE2 = BenchmarkGroup()
+
     SUITE2["mul!"]["CPU"]["SuiteSparseGraphBLAS"] = @benchmarkable begin
-        for i = 1:10
+        for j = 1:10
             mul!(res_ssGB, $A_ssGB, $b_ssGB, SEMIRING; accum = ACCUM_SSGB)
         end
-    end evals = 1 setup = (res_ssGB = GBVector(zeros(ELTYPE_RES, $SIZE)))
-
+    end evals = 1 setup = (res_ssGB = GBVector{INDEX_TYPE}($SIZE, fill = zero(INDEX_TYPE)))
+    
     SUITE2["mul!"]["GPU"]["GPUGraphsCSR"] = @benchmarkable begin
-        for i = 1:10
-            gpu_spmv!(res_gpu, $A_csr_gpu, $b_gpu, MUL, ADD, ACCUM)
+        for j = 1:10
+            gpu_spmv!(res_gpu, $A_csr_gpu, $b_gpu; mul = MUL, add = ADD, accum = ACCUM)
         end
         KernelAbstractions.synchronize(BACKEND)
     end evals = 1 setup =
         (res_gpu = KernelAbstractions.zeros(BACKEND, ELTYPE_RES, $SIZE))
 
-    if i != 3
+    if MAIN_TYPE == Bool
+
+        SUITE2["bfs"]["CPU"]["Graphs.jl"] = @benchmarkable begin
+            Graphs.bfs_parents($graph, one(INDEX_TYPE))
+        end evals = 1
+
+        SUITE2["bfs"]["CPU"]["SuiteSparseGraphBLAS"] = @benchmarkable begin
+            bfs_BLAS!($A_ssGB, one(INDEX_TYPE), res_ssGB)
+        end evals = 1 setup = (res_ssGB = GBVector{INDEX_TYPE}($SIZE, fill = zero(INDEX_TYPE)))
+    
+        SUITE2["bfs"]["GPU"]["GPUGraphsCSR"] = @benchmarkable begin
+            GPUGraphs.bfs_parents($A_csr_gpu, one(INDEX_TYPE))
+            KernelAbstractions.synchronize(BACKEND)
+        end evals = 1
+        
+    end
+
+    if i >= 2
 
         SUITE2["mul!"]["GPU"]["GPUGraphsELL"] = @benchmarkable begin
-            for i = 1:10
-                gpu_spmv!(res_gpu, $A_ell_gpu, $b_gpu, MUL, ADD, ACCUM)
+            for j = 1:10
+                gpu_spmv!(res_gpu, $A_ell_gpu, $b_gpu; mul = MUL, add = ADD, accum = ACCUM)
             end
             KernelAbstractions.synchronize(BACKEND)
         end evals = 1 setup =
             (res_gpu = KernelAbstractions.zeros(BACKEND, ELTYPE_RES, $SIZE))
+
+        if MAIN_TYPE == Bool
+            SUITE2["bfs"]["GPU"]["GPUGraphsELL"] = @benchmarkable begin
+                GPUGraphs.bfs_parents($A_ell_gpu, one(INDEX_TYPE))
+                KernelAbstractions.synchronize(BACKEND)
+            end evals = 1
+        end
+
     end
     println("Launching benchmarks\n")
     bench_res2 = run(SUITE2)
     println("Done. ")
+
+    ## Graphs.jl ##
+
+    if MAIN_TYPE == Bool
+        push!(
+            DATA_BFS_RESULTS,
+            (
+                "bfs",
+                DATASET_NAMES[i],
+                "Graphs.jl",
+                median(bench_res2["bfs"]["CPU"]["Graphs.jl"].times),
+            ),
+        )
+    end
+
+    ## SSGB ## 
     push!(
-        DATA_RESULTS,
+        DATA_MUL_RESULTS,
         (
             "spmv!",
             DATASET_NAMES[i],
@@ -198,8 +364,21 @@ for i = 1:NB_DATASETS
             median(bench_res2["mul!"]["CPU"]["SuiteSparseGraphBLAS"].times),
         ),
     )
+    if MAIN_TYPE == Bool
+        push!(
+            DATA_BFS_RESULTS,
+            (
+                "bfs",
+                DATASET_NAMES[i],
+                "SuiteSparseGraphBLAS",
+                median(bench_res2["bfs"]["CPU"]["SuiteSparseGraphBLAS"].times),
+            ),
+        )
+    end 
+
+    ## GPU - CSR ##
     push!(
-        DATA_RESULTS,
+        DATA_MUL_RESULTS,
         (
             "spmv!",
             DATASET_NAMES[i],
@@ -207,9 +386,23 @@ for i = 1:NB_DATASETS
             median(bench_res2["mul!"]["GPU"]["GPUGraphsCSR"].times),
         ),
     )
-    if i != 3
+    if MAIN_TYPE == Bool
         push!(
-            DATA_RESULTS,
+            DATA_BFS_RESULTS,
+            (
+                "bfs",
+                DATASET_NAMES[i],
+                "GPUGraphsCSR",
+                median(bench_res2["bfs"]["GPU"]["GPUGraphsCSR"].times),
+            ),
+        )
+    end
+
+    ## GPU - ELL ## (skiped for Orkut and LiveJournal)
+    if i >= 2
+
+        push!(
+            DATA_MUL_RESULTS,
             (
                 "spmv!",
                 DATASET_NAMES[i],
@@ -217,10 +410,28 @@ for i = 1:NB_DATASETS
                 median(bench_res2["mul!"]["GPU"]["GPUGraphsELL"].times),
             ),
         )
+
+        if MAIN_TYPE == Bool
+            push!(
+                DATA_BFS_RESULTS,
+                (
+                    "bfs",
+                    DATASET_NAMES[i],
+                    "GPUGraphsELL",
+                    median(bench_res2["bfs"]["GPU"]["GPUGraphsELL"].times),
+                ),
+            )
+        end
+
     else
-        push!(DATA_RESULTS, ("spmv!", DATASET_NAMES[i], "GPUGraphsELL", 0))
+        push!(DATA_MUL_RESULTS, ("spmv!", DATASET_NAMES[i], "GPUGraphsELL", 0))
+        if MAIN_TYPE == Bool
+            push!(DATA_BFS_RESULTS, ("bfs", DATASET_NAMES[i], "GPUGraphsELL", 0))
+        end
     end
 end
-println(DATA_RESULTS)
-CSV.write("benchmark/out/spmv_results_data.csv", DATA_RESULTS)
+println(DATA_MUL_RESULTS)
+println(DATA_BFS_RESULTS)
+CSV.write("benchmark/out/spmv_results_data.csv", DATA_MUL_RESULTS)
+CSV.write("benchmark/out/bfs_results_data.csv", DATA_BFS_RESULTS)
 println("Done. ")
