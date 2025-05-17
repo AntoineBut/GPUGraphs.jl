@@ -302,9 +302,10 @@ end
     #row = @index(Global, Linear)
     #slice = (row-1) ÷ slice_size + 1
     #offset = (row-1) % slice_size
-
+    start = a_slice_ptr[slice] + offset
+    stop = a_slice_ptr[slice + 1] - 1
     acc = monoid_neutral_element
-    for i = a_slice_ptr[slice] + offset:slice_size:a_slice_ptr[slice + 1] - 1
+    for i = start:slice_size:stop
         col = a_col_val[i]
         acc = add(acc, mul(a_nz_val[i], b[col], row, col, col, 1), row, col, col, 1)
     end
