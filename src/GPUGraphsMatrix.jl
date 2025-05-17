@@ -195,10 +195,9 @@ sprand_gpu(::Type{Tv}, m::Int, n::Int, p::Real, backend::Backend) where {Tv} =
 # KA functions
 KernelAbstractions.get_backend(A::SparseGPUMatrixCSR) = get_backend(A.nzval)
 
-### Padded CSR Matrix 
+### Padded Matrix: SELL format
 
-
-mutable struct SparseGPUMatrixELL{
+mutable struct SparseGPUMatrixSELL{
     Tv,
     Ti<:Integer,
     Gv<:AbstractVector{Tv}, # Cannot put AbstractGPUVector here because KA's CPU backend uses Vector, 
@@ -206,17 +205,25 @@ mutable struct SparseGPUMatrixELL{
 } <: AbstractSparseGPUMatrix{Tv,Ti}
     m::Int
     n::Int
-    nnz_per_row::Gi
+    slice_size::Int
+    nslices::Int    # Number of slices
+    nnz::Int        # Number of nonzeros
+    n_stored::Int   # Number of stored values (padded)
+    slice_ptr::Gi   # Index of the first element of each slice
     colval::Gi
     nzval::Gv
     """
         Constructors for a SparseGPUMatrixELL
-        SparseGPUMatrixELL(m::Int, n::Int, nnz_per_row::AbstractGPUVector{Ti}, colval::AbstractGPUVector{Ti}, nzval::AbstractGPUVector{Tv}, backend::Backend)
+        
     """
-    function SparseGPUMatrixELL(
+    function SparseGPUMatrixSELL(
         m::Int,
         n::Int,
-        nnz_per_row::Gi,
+        slice_size::Int,
+        nslices::Int,
+        nnz::Int,
+        n_stored::Int,
+        slice_ptr::Gi,
         colval::Gi,
         nzval::Gv,
         backend::B,
@@ -227,21 +234,21 @@ mutable struct SparseGPUMatrixELL{
         Gi<:AbstractVector{Ti},
         B<:KernelAbstractions.Backend,
     }
-        if length(nnz_per_row) != m
-            throw(ArgumentError("length(nnz_per_row) must be equal to m"))
+        if length(slice_ptr) != nslices+1
+            throw(ArgumentError("length(slice_ptr) must be equal to nslices+1"))
         end
-        if length(colval) != length(nzval)
-            throw(ArgumentError("length(colval) must be equal to length(nzval)"))
+        if length(colval) != length(nzval) || length(colval) != n_stored
+            throw(ArgumentError("length(colval) and length(nzval) must be equal to n_stored"))
         end
         if !isempty(colval) && (maximum(colval) > n || minimum(colval) < 0)
             throw(ArgumentError("colval contains an index out of bounds"))
         end
 
-        if get_backend(nnz_per_row) != backend
-            nnz_per_row_gpu = allocate(backend, Ti, length(nnz_per_row))
-            copyto!(nnz_per_row_gpu, nnz_per_row)
+        if get_backend(slice_ptr) != backend
+            slice_ptr_gpu = allocate(backend, Ti, length(slice_ptr))
+            copyto!(slice_ptr_gpu, slice_ptr)
         else
-            nnz_per_row_gpu = nnz_per_row
+            slice_ptr_gpu = slice_ptr
         end
 
         if get_backend(colval) != backend
@@ -257,80 +264,124 @@ mutable struct SparseGPUMatrixELL{
         else
             nzval_gpu = nzval
         end
-        new{Tv,Ti,typeof(nzval_gpu),typeof(nnz_per_row_gpu)}(
+        new{Tv,Ti,typeof(nzval_gpu),typeof(slice_ptr_gpu)}(
             m,
             n,
-            nnz_per_row_gpu,
+            slice_size,
+            nslices,
+            nnz,
+            n_stored,
+            slice_ptr_gpu,
             colval_gpu,
             nzval_gpu,
         )
     end
 end
 
-function SparseGPUMatrixELL(
+function SparseGPUMatrixSELL(
     m::Matrix{Tv},
     backend::Backend,
+    slice_size::Int = 32,
+
     ::Type{Ti} = Int32,
 ) where {Tv,Ti<:Integer}
     sparse_matrix_csc = convert(SparseMatrixCSC{Tv,Ti}, sparse(m))
-    SparseGPUMatrixELL(sparse_matrix_csc, backend)
+    SparseGPUMatrixSELL(sparse_matrix_csc, slice_size, backend)
 end
 
-function SparseGPUMatrixELL(
+function SparseGPUMatrixSELL(
     m::Transpose{Tv,<:SparseMatrixCSC{Tv,Ti}},
+    slice_size::Int,
     backend::Backend,
 ) where {Tv,Ti<:Integer}
     m_t = m.parent
     rowptr = m_t.colptr
     colval = m_t.rowval
     nzval = m_t.nzval
+    
+    n_slices = ceil(Int, size(m_t, 2) / slice_size)
+    max_nnz_per_slice = zeros(Int, n_slices)
     nnz_per_row = diff(rowptr)
-    max_nnz = maximum(nnz_per_row)
 
-    colval_padded = zeros(Ti, length(nnz_per_row) * max_nnz)
-    nzval_padded = zeros(Tv, length(nnz_per_row) * max_nnz)
-
-    for i = 1:length(nnz_per_row)
-        row_start = rowptr[i]
-        row_end = rowptr[i+1]
-        row_nnz = row_end - row_start
-        colval_padded[(i-1)*max_nnz+1:i*max_nnz] =
-            [colval[row_start:row_end-1]; ones(Ti, max_nnz - row_nnz)]
-        nzval_padded[(i-1)*max_nnz+1:i*max_nnz] =
-            [nzval[row_start:row_end-1]; zeros(Tv, max_nnz - row_nnz)]
+    # Compute the maximum number of nonzeros per row for each slice
+    n_stored = 0
+    for i = 1:n_slices
+        row_start = (i-1) * slice_size + 1
+        row_end = min(i * slice_size, size(m_t, 2))
+        max_nnz_per_slice[i] = maximum(nnz_per_row[row_start:row_end])
+        n_stored += max_nnz_per_slice[i] * slice_size
+    end
+    colval_padded = ones(Ti, n_stored)
+    nzval_padded = zeros(Tv, n_stored)
+    slice_ptr = zeros(Ti, n_slices + 1)
+    slice_ptr[1] = 1
+    for i = 1:n_slices
+        slice_ptr[i + 1] = slice_ptr[i] + max_nnz_per_slice[i] * slice_size
     end
 
-    SparseGPUMatrixELL(
+    for slice = 1:n_slices
+        slice_start = (slice - 1) * slice_size + 1
+        slice_end = min(slice * slice_size, size(m_t, 2))
+        # Fill the padded sub-matrix for each slice in Row-Major order
+        max_nnz = max_nnz_per_slice[slice]
+        temp_colval = ones(Ti, slice_size, max_nnz)
+        temp_nzval = zeros(Tv, slice_size, max_nnz)
+        for row in slice_start:slice_end
+            if row > size(m_t, 2)
+                break
+            end
+            start = rowptr[row]
+            end_ = rowptr[row + 1] - 1
+            temp_colval[row - slice_start + 1, 1:(end_ - start + 1)] = colval[start:end_]
+            temp_nzval[row - slice_start + 1, 1:(end_ - start + 1)] = nzval[start:end_]
+        end
+        # Reshape the sub-matrix to make it column-major vector and copy it to final storage
+       
+        colval_padded[slice_ptr[slice]:slice_ptr[slice + 1] - 1] =
+            collect(Iterators.flatten(temp_colval)) # matrix -> transposed matrix -> vector with inverted dimensions
+        nzval_padded[slice_ptr[slice]:slice_ptr[slice + 1] - 1] =
+            collect(Iterators.flatten(temp_nzval))
+
+
+    end
+
+    SparseGPUMatrixSELL(
         size(m_t, 2),
         size(m_t, 1),
-        nnz_per_row,
-        collect(Iterators.flatten(transpose(reshape(colval_padded, Int(max_nnz), :)))), # vector -> matrix -> vector with inverted dimensions
-        collect(Iterators.flatten(transpose(reshape(nzval_padded, Int(max_nnz), :)))),
+        slice_size,
+        n_slices,
+        nnz(m_t),
+        n_stored,
+        slice_ptr,
+        colval_padded,
+        nzval_padded,
         backend,
     )
+
 end
 
-function SparseGPUMatrixELL(
+function SparseGPUMatrixSELL(
     m::SparseMatrixCSC{Tv,Ti},
+    slice_size::Int,
     backend::Backend,
 ) where {Tv,Ti<:Integer}
-    SparseGPUMatrixELL(transpose(sparse(transpose(m))), backend)
+    SparseGPUMatrixSELL(transpose(sparse(transpose(m))), slice_size, backend)
 end
 
 
 # Base methods for the SparseGPUMatrixCSR type
-Base.size(A::SparseGPUMatrixELL) = (A.m, A.n)
-Base.size(A::SparseGPUMatrixELL, i::Int) = (i == 1) ? A.m : A.n
-Base.length(A::SparseGPUMatrixELL) = A.m * A.n
-Base.show(io::IO, A::SparseGPUMatrixELL) = println(
+Base.size(A::SparseGPUMatrixSELL) = (A.m, A.n)
+Base.size(A::SparseGPUMatrixSELL, i::Int) = (i == 1) ? A.m : A.n
+Base.length(A::SparseGPUMatrixSELL) = A.m * A.n
+Base.show(io::IO, A::SparseGPUMatrixSELL) = println(
     io,
-    "SparseGPUMatrixELL{$(eltype(A.nzval)) - $(eltype(A.colval))}($(size(A, 1)), $(size(A, 2))) - $(nnz(A)) explicit elements",
+    "SparseGPUMatrixSELL{$(eltype(A.nzval)) - $(eltype(A.colval))}($(size(A, 1)), $(size(A, 2))) - $(nnz(A)) explicit elements",
 )
-Base.display(A::SparseGPUMatrixELL) = show(stdout, A)
+Base.display(A::SparseGPUMatrixSELL) = show(stdout, A)
 
 
 
-function Base.getindex(A::SparseGPUMatrixELL, i::Int, j::Int)
+function Base.getindex(A::SparseGPUMatrixSELL, i::Int, j::Int)
     #@warn "Scalar indexing on a SparseGPUMatrixCSR is slow. For better performance, vectorize the operation."
     if i < 1 || i > A.m || j < 1 || j > A.n
         throw(BoundsError(A, (i, j)))
@@ -347,7 +398,7 @@ function Base.getindex(A::SparseGPUMatrixELL, i::Int, j::Int)
 
 end
 
-function Base.setindex!(A::SparseGPUMatrixELL, v, i::Int, j::Int)
+function Base.setindex!(A::SparseGPUMatrixSELL, v, i::Int, j::Int)
     if i < 1 || i > A.m || j < 1 || j > A.n
         throw(BoundsError(A, (i, j)))
     end
@@ -368,12 +419,12 @@ end
 
 # SparseArrays functions
 # Function to get the number of nonzeros in the matrix
-SparseArrays.nnz(A::SparseGPUMatrixELL) = reduce(+, A.nnz_per_row)
+SparseArrays.nnz(A::SparseGPUMatrixSELL) = A.nnz
 #sprand_gpu(::Type{Tv}, m::Int, n::Int, p::Real, backend::Backend) where {Tv} =
 #    SparseGPUMatrixCSR(transpose(SparseArrays.sprand(Tv, m, n, p)), backend)
 
 # KA functions
-KernelAbstractions.get_backend(A::SparseGPUMatrixELL) = get_backend(A.nzval)
+KernelAbstractions.get_backend(A::SparseGPUMatrixSELL) = get_backend(A.nzval)
 
 
 mutable struct SparseGPUMatrixCSC{

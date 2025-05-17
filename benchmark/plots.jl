@@ -3,8 +3,8 @@ using CSV
 using DataFrames
 
 # Load the data. Columns are operation, size, implementation, time
-df = DataFrame(CSV.File("benchmark/out/spmv_results.csv"))
-df_bfs = DataFrame(CSV.File("benchmark/out/bfs_results.csv"))
+df = DataFrame(CSV.File("benchmark/out/spmv_cusparse.csv"))
+df_bfs = DataFrame(CSV.File("benchmark/out/bfs_results_cuda.csv"))
 
 df[!, :time] /= 1e9  # convert ns to s
 df_bfs[!, :time] /= 1e9  # convert ns to s
@@ -45,6 +45,7 @@ p_bfs = @df df_bfs plot(
     ylim = (1e-5, 1e+1),
 )
 display(p_bfs)
+savefig(p_bfs, "benchmark/out/plot_bfs_results.png")
 #"""
 # Plot the speedup relative to the SuiteSparseGraphBLAS implementation
 
@@ -52,27 +53,32 @@ display(p_bfs)
 ssgb_times = df[df.implementation.=="SuiteSparseGraphBLAS", :time]
 csr_gpu_times = df[df.implementation.=="GPUGraphsCSR", :time]
 ell_gpu_times = df[df.implementation.=="GPUGraphsELL", :time]
+cusparse_csr_times = df[df.implementation.=="CUSPARSE-CSR", :time]
+cusparse_csc_times = df[df.implementation.=="CUSPARSE-CSC", :time]
 
 
 
 # Calculate the speedup
 speedup_csr = ssgb_times ./ csr_gpu_times
 speedup_ell = ssgb_times ./ ell_gpu_times
+speedup_cusparse_csr = ssgb_times ./ cusparse_csr_times
+speedup_cusparse_csc = ssgb_times ./ cusparse_csc_times
 
 # Plot the speedup
 speedup_plot = plot(
     unique(df.size),
-    [speedup_csr, speedup_ell],
-    label = ["CSR" "ELL"],
+    [speedup_csr, speedup_ell, speedup_cusparse_csr, speedup_cusparse_csc],
+    label = ["CSR" "ELL" "CuSparse-CSR" "CuSparse-CSC"],
     xlabel = "Size",
     ylabel = "Speedup",
-    title = "Speedup of GPUGraphs SPMV relative to SSBG",
+    title = "Speedup of GPU spmv relative to SSBG",
     legend = true,
     xscale = :log2,
     xticks = [2^i for i = 1:30],
     markershape = [:utriangle :x :circle :square],
 )
 display(speedup_plot)
+savefig(speedup_plot, "benchmark/out/plot_spmv_speedup.png")
 #"""
 # Get the times
 graphsjl_times = df_bfs[df_bfs.implementation.=="Graphs.jl", :time]
@@ -102,18 +108,20 @@ speedup_plot_bfs = plot(
 display(speedup_plot_bfs)
 #"""
 
-df2 = DataFrame(CSV.File("benchmark/out/spmv_results_data.csv"))
+df2 = DataFrame(CSV.File("benchmark/out/spmv_cusparse_data.csv"))
 df2[!, :time] /= 1e9  # convert ns to s
 
 df2_bfs = DataFrame(CSV.File("benchmark/out/bfs_results_data.csv"))
 df2_bfs[!, :time] /= 1e9  # convert ns to s
 
 # For each dataset, normalize the time by the time of the SuiteSparseGraphBLAS implementation
-gb_times = df2[df2.implementation.=="SuiteSparseGraphBLAS", :time]
-gb_times_column = repeat(gb_times, inner = 3)
+gb_times = df2[df2.implementation.=="CUSPARSE-CSR", :time]
+gb_times_column = repeat(gb_times, inner = 4)
 # Normalize the time by the SuiteSparseGraphBLAS time
 df2[!, :time] = df2[!, :time] ./ gb_times_column
 
+# Remove the SuiteSparseGraphBLAS implementation from the dataframe
+df2 = df2[df2.implementation .!= "SuiteSparseGraphBLAS", :]
 
 # Plot the data as 3 bar plots (one for each dataset), with the x-axis as the implementation, and the y-axis as the time
 p2 = @df df2 bar(
@@ -121,7 +129,7 @@ p2 = @df df2 bar(
     :time,
     group = :implementation,
     bar_width = 1,
-    ylabel = "Time (relative to SuiteSparseGraphBLAS)",
+    ylabel = "Time (relative to CUSPARSE)",
     xlabel = "Implementation",
     xticks = (2:3:10, unique(df2.dataset)),
     legend = :topleft,
@@ -129,13 +137,16 @@ p2 = @df df2 bar(
 )
 # Add the speedup
 speedups = 1 ./ df2[!, :time]
-speedups[end] = 1.0
-annotate!(2, 0.2, text("$(round(speedups[2], digits = 2))x \n", :black, 8, :center))
-annotate!(3, 0.2, text("$(round(speedups[3], digits = 2))x \n", :black, 8, :center))
-annotate!(5, 0.2, text("$(round(speedups[5], digits = 2))x \n", :black, 8, :center))
-annotate!(6, 0.2, text("$(round(speedups[6], digits = 2))x \n", :black, 8, :center))
-annotate!(8, 0.2, text("$(round(speedups[8], digits = 2))x \n", :black, 8, :center))
-annotate!(9, 0.2, text("$(round(speedups[9], digits = 2))x \n", :black, 8, :center))
+
+annotate!(1, 0, text("$(round(speedups[1], digits = 2))x \n", :black, 8, :center))
+annotate!(2, 0, text("$(round(speedups[2], digits = 2))x \n", :black, 8, :center))
+annotate!(3, 0, text("$(round(speedups[3], digits = 2))x \n", :black, 8, :center))
+annotate!(4, 0, text("$(round(speedups[4], digits = 2))x \n", :black, 8, :center))
+annotate!(5, 0, text("$(round(speedups[5], digits = 2))x \n", :black, 8, :center))
+annotate!(6, 0, text("$(round(speedups[6], digits = 2))x \n", :black, 8, :center))
+annotate!(7, 0, text("$(round(speedups[7], digits = 2))x \n", :black, 8, :center))
+annotate!(8, 0, text("$(round(speedups[8], digits = 2))x \n", :black, 8, :center))
+annotate!(9, 0, text("$(round(speedups[9], digits = 2))x \n", :black, 8, :center))
 
 display(p2)
 
@@ -162,15 +173,14 @@ p2_bfs = @df df2_bfs bar(
 )
 # Add the speedup
 speedups_bfs = 1 ./ df2_bfs[!, :time]
-speedups_bfs[4] = 1.0
 annotate!(2, 0.2, text("$(round(speedups_bfs[2], digits = 2))x \n", :black, 8, :center))
 annotate!(3, 0.2, text("$(round(speedups_bfs[3], digits = 2))x \n", :black, 8, :center))
 annotate!(4, 0.2, text("$(round(speedups_bfs[4], digits = 2))x \n", :black, 8, :center))
-
+annotate!(5, 0.2, text("$(round(speedups_bfs[5], digits = 2))x \n", :black, 8, :center))
 annotate!(6, 0.2, text("$(round(speedups_bfs[6], digits = 2))x \n", :black, 8, :center))
 annotate!(7, 0.2, text("$(round(speedups_bfs[7], digits = 2))x \n", :black, 8, :center))
 annotate!(8, 0.2, text("$(round(speedups_bfs[8], digits = 2))x \n", :black, 8, :center))
-
+annotate!(9, 0.2, text("$(round(speedups_bfs[9], digits = 2))x \n", :black, 8, :center))
 annotate!(10, 0.2, text("$(round(speedups_bfs[10], digits = 2))x \n", :black, 8, :center))
 annotate!(11, 0.2, text("$(round(speedups_bfs[11], digits = 2))x \n", :black, 8, :center))
 annotate!(12, 0.2, text("$(round(speedups_bfs[12], digits = 2))x \n", :black, 8, :center))

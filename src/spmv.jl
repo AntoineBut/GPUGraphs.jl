@@ -283,11 +283,12 @@ function gpu_spmv!(
 end
 
 
-@kernel function ell_spmv_kernel!(
+@kernel function sell_spmv_kernel!(
     c,
     @Const(a_col_val),
     @Const(a_nz_val),
-    @Const(a_nnz_per_row),
+    @Const(a_slice_ptr),
+    @Const(slice_size),
     @Const(n),
     @Const(b),
     @Const(monoid_neutral_element),
@@ -295,18 +296,22 @@ end
     add,
     accum,
 )
-    # Computes A*B and stores the result in C using the semiring semiring.
-    row = @index(Global, Linear)
+    offset, slice = @index(Global, NTuple)
+    offset = offset - 1
+    row = (slice-1) * slice_size + offset + 1
+    #row = @index(Global, Linear)
+    #slice = (row-1) ÷ slice_size + 1
+    #offset = (row-1) % slice_size
+
     acc = monoid_neutral_element
-    for iter = 0:a_nnz_per_row[row]-1
-        idx = row + iter * n
-        col = a_col_val[idx]
-        acc = add(acc, mul(a_nz_val[idx], b[col], row, col, col, 1), row, col, col, 1)
+    for i = a_slice_ptr[slice] + offset:slice_size:a_slice_ptr[slice + 1] - 1
+        col = a_col_val[i]
+        acc = add(acc, mul(a_nz_val[i], b[col], row, col, col, 1), row, col, col, 1)
     end
     c[row] = accum(c[row], acc, row, 1, row, 1)
 end
 
-@kernel function dense_masked_ell_spmv_kernel!(
+@kernel function dense_masked_sell_spmv_kernel!(
     c,
     @Const(a_col_val),
     @Const(a_nz_val),
@@ -320,16 +325,18 @@ end
     add,
     accum,
 )
-    # Computes A*B and stores the result in C using the semiring semiring.
     row = @index(Global, Linear)
     if mask[row] != mask_zero
+        row = @index(Global, Linear)
+        slice = (row-1) ÷ slice_size + 1
+        offset = (row-1) % slice_size
+
         acc = monoid_neutral_element
-        for iter = 0:a_nnz_per_row[row]-1
-            idx = row + iter * n
-            col = a_col_val[idx]
-            acc = add(acc, mul(a_nz_val[idx], b[col], row, col, col, 1), row, col, col, 1)
+        for i = a_slice_ptr[slice] + offset:slice_size:a_slice_ptr[slice + 1] - 1
+            col = a_col_val[i]
+            acc = add(acc, mul(a_nz_val[i], b[col], row, col, col, 1), row, col, col, 1)
         end
-        c[row] = accum(c[row], acc, row, 1, row, 1)
+    c[row] = accum(c[row], acc, row, 1, row, 1)
     end
 end
 
@@ -337,7 +344,7 @@ end
 
 function gpu_spmv!(
     C::ResVec,
-    A::SparseGPUMatrixELL{Tv,Ti},
+    A::SparseGPUMatrixSELL{Tv,Ti},
     B::InputVec;
     mul::Function = GPUGraphs_mul,
     add::Function = GPUGraphs_add,
@@ -384,8 +391,8 @@ function gpu_spmv!(
             C,
             A.colval,
             A.nzval,
-            A.nnz_per_row,
-            A.n,
+            A.slice_ptr,
+            A.slice_size,
             B,
             monoid_neutral(Tv, add),
             mask,
@@ -398,19 +405,20 @@ function gpu_spmv!(
         return
     end
 
-    kernel! = ell_spmv_kernel!(backend)
+    kernel! = sell_spmv_kernel!(backend)
     kernel!(
         C,
         A.colval,
         A.nzval,
-        A.nnz_per_row,
+        A.slice_ptr,
+        A.slice_size,
         A.n,
         B,
         monoid_neutral(Tv, add),
         mul,
         add,
         accum;
-        ndrange = size(A, 1),
+        ndrange = (A.slice_size, A.nslices),
     )
 end
 

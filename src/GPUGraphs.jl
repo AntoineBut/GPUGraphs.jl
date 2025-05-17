@@ -23,7 +23,7 @@ include("algorithms/bfs.jl")
 export AbstractSparseGPUMatrix,
     SparseGPUMatrixCSR,
     SparseGPUMatrixCSC,
-    SparseGPUMatrixELL,
+    SparseGPUMatrixSELL,
     SparseGPUVector,
     AbstractSparseGPUVector,
     gpu_spmv!,
