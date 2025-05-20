@@ -311,7 +311,7 @@ function SparseGPUMatrixSELL(
         max_nnz_per_slice[i] = maximum(nnz_per_row[row_start:row_end])
         n_stored += max_nnz_per_slice[i] * slice_size
     end
-    colval_padded = ones(Ti, n_stored)
+    colval_padded = zeros(Ti, n_stored)
     nzval_padded = zeros(Tv, n_stored)
     slice_ptr = zeros(Ti, n_slices + 1)
     slice_ptr[1] = 1
@@ -324,7 +324,7 @@ function SparseGPUMatrixSELL(
         slice_end = min(slice * slice_size, size(m_t, 2))
         # Fill the padded sub-matrix for each slice in Row-Major order
         max_nnz = max_nnz_per_slice[slice]
-        temp_colval = ones(Ti, slice_size, max_nnz)
+        temp_colval = zeros(Ti, slice_size, max_nnz)
         temp_nzval = zeros(Tv, slice_size, max_nnz)
         for row in slice_start:slice_end
             if row > size(m_t, 2)

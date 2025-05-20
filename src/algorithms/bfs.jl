@@ -114,6 +114,7 @@ end
 function bfs_parents(
     A_T::TM,
     source::Ti;
+    batch_size::Int = 8,
 ) where {Tv,Ti<:Integer,TM<:AbstractSparseGPUMatrix{Tv,Ti}}
     backend = get_backend(A_T)
 
@@ -128,7 +129,7 @@ function bfs_parents(
 
     parents .= typemax(Ti)
 
-    bfs_parents!(A_T, source, parents, curr, next, to_explore)
+    bfs_parents!(A_T, source, parents, curr, next, to_explore, batch_size)
     return parents
 end
 
@@ -139,6 +140,7 @@ function bfs_parents!(
     curr::TVv,
     next::TVi,
     to_explore::TVv,
+    batch_size::Int = 8,
 ) where {
     Tv,
     Ti<:Integer,
@@ -164,8 +166,12 @@ function bfs_parents!(
         )
         # set curr to true for the next nodes
         @. curr = next != zero(Ti)
-        if !any(curr)
-            return nothing
+        #if 
+        if iter % batch_size == 0
+            if !any(curr) # TODO: change this as it performs a sync; leading to half the performance on CUDA
+                #println(iter)
+                return nothing
+            end
         end
         # Fill the parents array where next is not zero
         @. parents = ifelse(curr != zero(Tv), next, parents)
