@@ -396,6 +396,7 @@ function gpu_spmv!(
             A.nzval,
             A.slice_ptr,
             A.slice_size,
+            A.n,
             B,
             monoid_neutral(Tv, add),
             mask,

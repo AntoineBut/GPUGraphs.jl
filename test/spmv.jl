@@ -103,13 +103,13 @@ end
     copyto!(res, C_gpu_dense_1)
     @test isapprox(res, C_cpu)
 
-    #C_gpu_2 = KernelAbstractions.zeros(TEST_BACKEND, Float32, 10)
-    #gpu_spmv!(C_gpu_2, A_gpu_ell, B_gpu; mask = MASK)
-    #KernelAbstractions.synchronize(TEST_BACKEND)
-    #@allowscalar @test C_gpu_2 == C_cpu
-    #
+    C_gpu_2 = KernelAbstractions.zeros(TEST_BACKEND, Float32, 10)
+    gpu_spmv!(C_gpu_2, A_gpu_ell, B_gpu; mask = mask_dense)
+    KernelAbstractions.synchronize(TEST_BACKEND)
+    @allowscalar @test C_gpu_2 == C_cpu
+    
     #C_gpu_3 = KernelAbstractions.zeros(TEST_BACKEND, Float32, 10)
-    #gpu_spmv!(C_gpu_3, A_gpu_csc, B_gpu; mask = MASK)
+    #gpu_spmv!(C_gpu_3, A_gpu_csc, B_gpu; mask = mask_dense)
     #KernelAbstractions.synchronize(TEST_BACKEND)
     #copyto!(res, C_gpu_3)
     #@test isapprox(res, C_cpu)
@@ -137,10 +137,13 @@ end
     C_gpu_dense_2 = KernelAbstractions.zeros(TEST_BACKEND, Float32, LARGE_NB)
     C_gpu_dense_3 = KernelAbstractions.zeros(TEST_BACKEND, Float32, LARGE_NB)
 
+    # CSR
     gpu_spmv!(C_gpu_sparse_1, A_gpu_csr, B_gpu; mask = mask_sparse)
     gpu_spmv!(C_gpu_dense_1, A_gpu_csr, B_gpu; mask = mask_dense)
-
-    #gpu_spmv!(C_gpu_2, A_gpu_ell, B_gpu; mask = MASK)
+    #SELL (only dense mask supported for now)
+    gpu_spmv!(C_gpu_dense_3, A_gpu_ell, B_gpu; mask = mask_dense)
+    
+    #CSC (only dense mask supported for now)
     #gpu_spmv!(C_gpu_3, A_gpu_csc, B_gpu; mask = MASK)
     KernelAbstractions.synchronize(TEST_BACKEND)
 
@@ -150,7 +153,8 @@ end
     @test isapprox(res, C_cpu)
     copyto!(res, C_gpu_dense_1)
     @test isapprox(res, C_cpu)
-    #...
+    copyto!(res, C_gpu_dense_3)
+    @test isapprox(res, C_cpu)
 
 
 end
