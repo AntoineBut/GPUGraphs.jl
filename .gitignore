@@ -32,6 +32,5 @@ Manifest.toml
 
 # .vscode directory for VS Code workspace settings
 .vscode/
-
-# .DS_Store files on macOS
+# macOS system files
 *.DS_Store
