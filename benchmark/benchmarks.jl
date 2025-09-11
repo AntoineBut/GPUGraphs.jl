@@ -2,7 +2,8 @@ using GPUGraphs
 using BenchmarkTools
 using SparseArrays
 import SuiteSparseGraphBLAS: GBMatrix, GBVector, gbrand, gbset, mul!, semiring, Monoid, ∧, ∨
-using Metal
+#using Metal
+using CUDA
 using KernelAbstractions
 import LinearAlgebra: mul!
 using DataFrames
@@ -40,7 +41,8 @@ end
 
 
 # Write your benchmarks here.
-BACKEND = Metal.MetalBackend()  # our personal laptops
+#BACKEND = Metal.MetalBackend()  # our personal laptops
+BACKEND = CUDA.CUDABackend()  # on the cluster
 # Get number of CPU threads
 n_cpu_threads = Sys.CPU_THREADS
 gbset(:nthreads, n_cpu_threads)

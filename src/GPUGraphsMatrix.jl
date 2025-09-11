@@ -213,7 +213,7 @@ mutable struct SparseGPUMatrixSELL{
     colval::Gi
     nzval::Gv
     """
-        Constructors for a SparseGPUMatrixELL
+        Constructors for a SparseGPUMatrixSELL
         
     """
     function SparseGPUMatrixSELL(
@@ -286,19 +286,19 @@ function SparseGPUMatrixSELL(
     ::Type{Ti} = Int32,
 ) where {Tv,Ti<:Integer}
     sparse_matrix_csc = convert(SparseMatrixCSC{Tv,Ti}, sparse(m))
-    SparseGPUMatrixSELL(sparse_matrix_csc, slice_size, backend)
+    SparseGPUMatrixSELL(sparse_matrix_csc, backend, slice_size)
 end
 
 function SparseGPUMatrixSELL(
     m::Transpose{Tv,<:SparseMatrixCSC{Tv,Ti}},
-    slice_size::Int,
     backend::Backend,
+    slice_size::Int = 32,
 ) where {Tv,Ti<:Integer}
     m_t = m.parent
     rowptr = m_t.colptr
     colval = m_t.rowval
     nzval = m_t.nzval
-    
+    slice_size = min(slice_size, size(m_t, 2))
     n_slices = ceil(Int, size(m_t, 2) / slice_size)
     max_nnz_per_slice = zeros(Int, n_slices)
     nnz_per_row = diff(rowptr)
@@ -362,10 +362,10 @@ end
 
 function SparseGPUMatrixSELL(
     m::SparseMatrixCSC{Tv,Ti},
-    slice_size::Int,
     backend::Backend,
+    slice_size::Int = 32,
 ) where {Tv,Ti<:Integer}
-    SparseGPUMatrixSELL(transpose(sparse(transpose(m))), slice_size, backend)
+    SparseGPUMatrixSELL(transpose(sparse(transpose(m))), backend, slice_size)
 end
 
 

@@ -302,21 +302,24 @@ end
     #row = @index(Global, Linear)
     #slice = (row-1) ÷ slice_size + 1
     #offset = (row-1) % slice_size
-    start = a_slice_ptr[slice] + offset
-    stop = a_slice_ptr[slice + 1] - 1
-    acc = monoid_neutral_element
-    for i = start:slice_size:stop
-        col = a_col_val[i]
-        acc = add(acc, mul(a_nz_val[i], b[col], row, col, col, 1), row, col, col, 1)
+    if row <= n
+        start = a_slice_ptr[slice] + offset
+        stop = a_slice_ptr[slice + 1] - 1
+        acc = monoid_neutral_element
+        for i = start:slice_size:stop
+            col = a_col_val[i]
+            acc = add(acc, mul(a_nz_val[i], b[col], row, col, col, 1), row, col, col, 1)
+        end
+        c[row] = accum(c[row], acc, row, 1, row, 1)
     end
-    c[row] = accum(c[row], acc, row, 1, row, 1)
 end
 
 @kernel function dense_masked_sell_spmv_kernel!(
     c,
     @Const(a_col_val),
     @Const(a_nz_val),
-    @Const(a_nnz_per_row),
+    @Const(a_slice_ptr),
+    @Const(slice_size),
     @Const(n),
     @Const(b),
     @Const(monoid_neutral_element),
@@ -328,7 +331,6 @@ end
 )
     row = @index(Global, Linear)
     if mask[row] != mask_zero
-        row = @index(Global, Linear)
         slice = (row-1) ÷ slice_size + 1
         offset = (row-1) % slice_size
 
@@ -387,7 +389,7 @@ function gpu_spmv!(
             throw(ArgumentError("Mask must be on the same backend as A"))
         end
 
-        kernel! = dense_masked_ell_spmv_kernel!(backend)
+        kernel! = dense_masked_sell_spmv_kernel!(backend)
         kernel!(
             C,
             A.colval,

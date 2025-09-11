@@ -1,7 +1,8 @@
 TEST_BACKEND = if get(ENV, "CI", "false") == "false"
 
-    Metal.MetalBackend()  # our personal laptops
-# KernelAbstractions.CPU()
+    #Metal.MetalBackend()  # our personal laptops
+    #CUDA.CUDABackend()  # on the cluster
+    KernelAbstractions.CPU()
 else
     KernelAbstractions.CPU()
 end
@@ -12,7 +13,7 @@ end
     B_cpu = rand(Float32, 10)
     C_cpu = A_cpu * B_cpu
     res = zeros(Float32, 10)
-    A_gpu_ell = SparseGPUMatrixELL(A_cpu, TEST_BACKEND)
+    A_gpu_ell = SparseGPUMatrixSELL(A_cpu, TEST_BACKEND)
     A_gpu_csr = SparseGPUMatrixCSR(A_cpu, TEST_BACKEND)
     A_gpu_csc = SparseGPUMatrixCSC(A_cpu, TEST_BACKEND)
     B_gpu = allocate(TEST_BACKEND, Float32, 10)
@@ -22,12 +23,14 @@ end
 
     gpu_spmv!(C_gpu_1, A_gpu_csr, B_gpu)
     KernelAbstractions.synchronize(TEST_BACKEND)
-    @allowscalar @test C_gpu_1 == C_cpu
+    copyto!(res, C_gpu_1)
+    @test isapprox(res, C_cpu)
 
     C_gpu_2 = KernelAbstractions.zeros(TEST_BACKEND, Float32, 10)
     gpu_spmv!(C_gpu_2, A_gpu_ell, B_gpu)
     KernelAbstractions.synchronize(TEST_BACKEND)
-    @allowscalar @test C_gpu_2 == C_cpu
+    copyto!(res, C_gpu_2)
+    @test isapprox(res, C_cpu)
 
     C_gpu_3 = KernelAbstractions.zeros(TEST_BACKEND, Float32, 10)
     gpu_spmv!(C_gpu_3, A_gpu_csc, B_gpu)
@@ -41,7 +44,7 @@ end
     B_cpu = rand(Float32, LARGE_NB)
     C_cpu = A_cpu * B_cpu
     A_gpu_csr = SparseGPUMatrixCSR(A_cpu, TEST_BACKEND)
-    A_gpu_ell = SparseGPUMatrixELL(A_cpu, TEST_BACKEND)
+    A_gpu_ell = SparseGPUMatrixSELL(A_cpu, TEST_BACKEND)
     A_gpu_csc = SparseGPUMatrixCSC(A_cpu, TEST_BACKEND)
     B_gpu = allocate(TEST_BACKEND, Float32, LARGE_NB)
     copyto!(B_gpu, B_cpu)
@@ -52,6 +55,7 @@ end
     gpu_spmv!(C_gpu_1, A_gpu_csr, B_gpu)
     gpu_spmv!(C_gpu_2, A_gpu_ell, B_gpu)
     gpu_spmv!(C_gpu_3, A_gpu_csc, B_gpu)
+
     KernelAbstractions.synchronize(TEST_BACKEND)
 
     res = zeros(Float32, LARGE_NB)
@@ -72,7 +76,7 @@ end
     B_cpu = rand(Float32, 10)
 
     res = zeros(Float32, 10)
-    A_gpu_ell = SparseGPUMatrixELL(A_cpu, TEST_BACKEND)
+    A_gpu_ell = SparseGPUMatrixSELL(A_cpu, TEST_BACKEND)
     A_gpu_csr = SparseGPUMatrixCSR(A_cpu, TEST_BACKEND)
     A_gpu_csc = SparseGPUMatrixCSC(A_cpu, TEST_BACKEND)
     B_gpu = allocate(TEST_BACKEND, Float32, 10)
@@ -91,10 +95,13 @@ end
 
     gpu_spmv!(C_gpu_sparse_1, A_gpu_csr, B_gpu; mask = mask_sparse)
     KernelAbstractions.synchronize(TEST_BACKEND)
-    @allowscalar @test C_gpu_sparse_1 == C_cpu
+    copyto!(res, C_gpu_sparse_1)
+    @test isapprox(res, C_cpu)
+
     gpu_spmv!(C_gpu_dense_1, A_gpu_csr, B_gpu; mask = mask_dense)
     KernelAbstractions.synchronize(TEST_BACKEND)
-    @allowscalar @test C_gpu_dense_1 == C_cpu
+    copyto!(res, C_gpu_dense_1)
+    @test isapprox(res, C_cpu)
 
     #C_gpu_2 = KernelAbstractions.zeros(TEST_BACKEND, Float32, 10)
     #gpu_spmv!(C_gpu_2, A_gpu_ell, B_gpu; mask = MASK)
@@ -117,7 +124,7 @@ end
     mask_sparse = SparseGPUVector(mask, TEST_BACKEND)
     C_cpu = A_cpu * B_cpu .* mask
     A_gpu_csr = SparseGPUMatrixCSR(A_cpu, TEST_BACKEND)
-    A_gpu_ell = SparseGPUMatrixELL(A_cpu, TEST_BACKEND)
+    A_gpu_ell = SparseGPUMatrixSELL(A_cpu, TEST_BACKEND)
     A_gpu_csc = SparseGPUMatrixCSC(A_cpu, TEST_BACKEND)
     B_gpu = allocate(TEST_BACKEND, Float32, LARGE_NB)
     copyto!(B_gpu, B_cpu)

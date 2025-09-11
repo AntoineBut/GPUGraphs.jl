@@ -38,8 +38,8 @@ const PAD_VAL = 1
     end
 
     if get(ENV, "CI", "false") == "false"
-        Pkg.add("Metal")
-        using Metal
+        Pkg.add("CUDA")
+        using CUDA
     end
 
     include("structs.jl")
