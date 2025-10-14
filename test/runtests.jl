@@ -44,5 +44,6 @@ const PAD_VAL = 1
 
     include("structs.jl")
     include("spmv.jl")
+    include("spmm.jl")
     include("bfs.jl")
 end
