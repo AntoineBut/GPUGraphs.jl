@@ -2,7 +2,7 @@ TEST_BACKEND = if get(ENV, "CI", "false") == "false"
 
     #Metal.MetalBackend()  # our personal laptops
     CUDA.CUDABackend()  # on the cluster
-    #KernelAbstractions.CPU()
+#KernelAbstractions.CPU()
 else
     KernelAbstractions.CPU()
 end
@@ -89,7 +89,7 @@ end
 
     C_cpu = A_cpu * B_cpu .* mask
 
-    
+
     copyto!(B_gpu, B_cpu)
     #C_gpu_sparse_1 = KernelAbstractions.zeros(TEST_BACKEND, Float32, 10)
     C_gpu_dense_1 = KernelAbstractions.zeros(TEST_BACKEND, Float32, 10)
@@ -153,14 +153,14 @@ end
     #SELL (only dense mask supported for now)
     #gpu_spmv!(C_gpu_sparse_2, A_gpu_sell, B_gpu; mask = mask_sparse)
     gpu_spmv!(C_gpu_dense_2, A_gpu_sell, B_gpu; mask = mask_dense)
-    
+
     #CSC (ignored for now)
     #gpu_spmv!(C_gpu_3, A_gpu_csc, B_gpu; mask = MASK)
     KernelAbstractions.synchronize(TEST_BACKEND)
 
     res = zeros(Float32, LARGE_NB)
 
-    
+
     copyto!(res, C_gpu_dense_1)
     @test isapprox(res, C_cpu)
     copyto!(res, C_gpu_dense_2)

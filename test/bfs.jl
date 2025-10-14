@@ -1,5 +1,5 @@
 TEST_BACKEND = if get(ENV, "CI", "false") == "false"
-    
+
     #Metal.MetalBackend()  # our personal laptops
     CUDA.CUDABackend()  # on the cluster
 # KernelAbstractions.CPU()

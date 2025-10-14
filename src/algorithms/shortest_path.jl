@@ -54,7 +54,7 @@ function shortest_path!(
             #mask = updated, Not used yet
         )
         # Diff : where we made progress
-        @. diff = next < dist 
+        @. diff = next < dist
         if reduce(|, diff) == zero(Tv)
             return nothing
         end
@@ -64,4 +64,3 @@ function shortest_path!(
     end
     return nothing
 end
-

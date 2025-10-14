@@ -29,14 +29,14 @@ MUL = GPUGraphs_mul
 ADD = GPUGraphs_add
 ACCUM = GPUGraphs_second
 ACCUM_SSGB = +
-SEMIRING = semiring(+, *, MAIN_TYPE, MAIN_TYPE)
+SEMIRING = semiring(+,*,MAIN_TYPE,MAIN_TYPE)
 
 if MAIN_TYPE == Bool
     MUL = GPUGraphs_band
     ADD = GPUGraphs_bor
     ACCUM = GPUGraphs_second
     ACCUM_SSGB = ∨
-    SEMIRING = semiring(∨, ∧, MAIN_TYPE, MAIN_TYPE)
+    SEMIRING = semiring(∨,∧,MAIN_TYPE,MAIN_TYPE)
 end
 
 
@@ -78,7 +78,8 @@ for SIZE in SIZES
         for i = 1:10
             mul!(res_ssGB, $A_ssGB, $b_ssGB, SEMIRING; accum = ACCUM_SSGB)
         end
-    end evals = 1 setup = (res_ssGB = GBVector{INDEX_TYPE}($SIZE, fill = zero(INDEX_TYPE)))
+    end evals = 1 setup =
+        (res_ssGB = GBVector{INDEX_TYPE}($SIZE, fill = zero(INDEX_TYPE)))
 
     SUITE["mul!"]["GPU"]["GPUGraphsCSR"] = @benchmarkable begin
         for i = 1:10
@@ -101,8 +102,10 @@ for SIZE in SIZES
         GSIZE = SIZE * 16
         print("Generating random graph of size $GSIZE \n")
         graph = dorogovtsev_mendes(GSIZE)
-        A_csc_cpu =
-            convert(SparseMatrixCSC{MAIN_TYPE,INDEX_TYPE}, adjacency_matrix(graph, MAIN_TYPE; dir = :out))
+        A_csc_cpu = convert(
+            SparseMatrixCSC{MAIN_TYPE,INDEX_TYPE},
+            adjacency_matrix(graph, MAIN_TYPE; dir = :out),
+        )
         A_csr_cpu = transpose(A_csc_cpu)
         print("Converting to GPU-CSR format\n")
         A_csr_gpu = SparseGPUMatrixCSR(A_csr_cpu, BACKEND)
@@ -111,7 +114,10 @@ for SIZE in SIZES
 
         print("Building GB sparse matrix\n")
         A_ssGB = GBMatrix(
-            convert(SparseMatrixCSC{MAIN_TYPE,INDEX_SSGB}, adjacency_matrix(graph, Bool; dir = :out))
+            convert(
+                SparseMatrixCSC{MAIN_TYPE,INDEX_SSGB},
+                adjacency_matrix(graph, Bool; dir = :out),
+            ),
         )
 
         SUITE["bfs"]["CPU"]["Graphs.jl"] = @benchmarkable begin
@@ -130,7 +136,8 @@ for SIZE in SIZES
 
         SUITE["bfs"]["CPU"]["SuiteSparseGraphBLAS"] = @benchmarkable begin
             bfs_BLAS!($A_ssGB, one(INDEX_TYPE), res_ssGB)
-        end evals = 1 setup = (res_ssGB = GBVector{INDEX_TYPE}($GSIZE, fill = zero(INDEX_TYPE)))
+        end evals = 1 setup =
+            (res_ssGB = GBVector{INDEX_TYPE}($GSIZE, fill = zero(INDEX_TYPE)))
     end
 
 
@@ -169,12 +176,7 @@ for SIZE in SIZES
     if MAIN_TYPE == Bool
         push!(
             BFS_RESULTS,
-            (
-                "bfs",
-                SIZE,
-                "Graphs.jl",
-                median(bench_res["bfs"]["CPU"]["Graphs.jl"].times),
-            ),
+            ("bfs", SIZE, "Graphs.jl", median(bench_res["bfs"]["CPU"]["Graphs.jl"].times)),
         )
         push!(
             BFS_RESULTS,
@@ -223,10 +225,10 @@ error("Stopping execution after synthetic benchmarks.")
 NB_DATASETS = 3
 
 ssmc = ssmc_db()
-orkut_path = fetch_ssmc(ssmc_matrices(ssmc, "SNAP", "Orkut"), format="RB")
+orkut_path = fetch_ssmc(ssmc_matrices(ssmc, "SNAP", "Orkut"), format = "RB")
 #live_journal_path = fetch_ssmc(ssmc_matrices(ssmc, "SNAP", "com-LiveJournal"), format="RB")
-osm_path = fetch_ssmc(ssmc_matrices(ssmc, "DIMACS10", "italy_osm"), format="RB") 
-nlpkkt_path = fetch_ssmc(ssmc_matrices(ssmc, "Schenk", "nlpkkt160"), format="RB")
+osm_path = fetch_ssmc(ssmc_matrices(ssmc, "DIMACS10", "italy_osm"), format = "RB")
+nlpkkt_path = fetch_ssmc(ssmc_matrices(ssmc, "Schenk", "nlpkkt160"), format = "RB")
 
 DATASET_NAMES = ["com-Orkut", "italy_osm", "nlpkkt160"]
 DATASET_PATHS = [
@@ -254,29 +256,24 @@ for i = 1:NB_DATASETS
 
     println("Loading graph data for dataset $(DATASET_NAMES[i])")
     # Load dataset
-    loaded_matrix = RutherfordBoeingData(joinpath(DATASET_PATHS[i], "$(DATASET_NAMES[i]).rb"))
+    loaded_matrix =
+        RutherfordBoeingData(joinpath(DATASET_PATHS[i], "$(DATASET_NAMES[i]).rb"))
     println("Loaded. ")
 
-    if i == 3 && MAIN_TYPE <: Integer 
+    if i == 3 && MAIN_TYPE <: Integer
         # nlpkkt160 is a float matrix, we need to convert it to a bool matrix 
         loaded_matrix.data.nzval .= 1.0
     end
 
     A_T = adjacency_matrix(SimpleDiGraph(loaded_matrix.data), Bool; dir = :both)
-    A_T = convert(
-        SparseMatrixCSC{MAIN_TYPE,INDEX_TYPE},
-        A_T,
-    )
+    A_T = convert(SparseMatrixCSC{MAIN_TYPE,INDEX_TYPE}, A_T)
     println("Converted to CSC.")
 
     SIZE = size(A_T, 1)
     A_csr_gpu = SparseGPUMatrixCSR(transpose(A_T), BACKEND)
     println("Converted to GPU-CSR.")
 
-    A_ssGB = GBMatrix(convert(
-                    SparseMatrixCSC{MAIN_TYPE,INDEX_SSGB},
-                    A_T)
-                    )
+    A_ssGB = GBMatrix(convert(SparseMatrixCSC{MAIN_TYPE,INDEX_SSGB}, A_T))
     println("Converted to GBMatrix.")
 
     graph = SimpleGraph(SimpleDiGraph(A_T))
@@ -295,8 +292,9 @@ for i = 1:NB_DATASETS
         for j = 1:10
             mul!(res_ssGB, $A_ssGB, $b_ssGB, SEMIRING; accum = ACCUM_SSGB)
         end
-    end evals = 1 setup = (res_ssGB = GBVector{INDEX_TYPE}($SIZE, fill = zero(INDEX_TYPE)))
-    
+    end evals = 1 setup =
+        (res_ssGB = GBVector{INDEX_TYPE}($SIZE, fill = zero(INDEX_TYPE)))
+
     SUITE2["mul!"]["GPU"]["GPUGraphsCSR"] = @benchmarkable begin
         for j = 1:10
             gpu_spmv!(res_gpu, $A_csr_gpu, $b_gpu; mul = MUL, add = ADD, accum = ACCUM)
@@ -313,13 +311,14 @@ for i = 1:NB_DATASETS
 
         SUITE2["bfs"]["CPU"]["SuiteSparseGraphBLAS"] = @benchmarkable begin
             bfs_BLAS!($A_ssGB, one(INDEX_TYPE), res_ssGB)
-        end evals = 1 setup = (res_ssGB = GBVector{INDEX_TYPE}($SIZE, fill = zero(INDEX_TYPE)))
-    
+        end evals = 1 setup =
+            (res_ssGB = GBVector{INDEX_TYPE}($SIZE, fill = zero(INDEX_TYPE)))
+
         SUITE2["bfs"]["GPU"]["GPUGraphsCSR"] = @benchmarkable begin
             GPUGraphs.bfs_parents($A_csr_gpu, one(INDEX_TYPE))
             KernelAbstractions.synchronize(BACKEND)
         end evals = 1
-        
+
     end
 
     if i >= 2
@@ -378,7 +377,7 @@ for i = 1:NB_DATASETS
                 median(bench_res2["bfs"]["CPU"]["SuiteSparseGraphBLAS"].times),
             ),
         )
-    end 
+    end
 
     ## GPU - CSR ##
     push!(

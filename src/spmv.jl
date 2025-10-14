@@ -15,7 +15,7 @@
     # Computes A*B and stores the result in C
     row = @index(Global, Linear)
     acc = monoid_neutral_element
-    for i = a_row_ptr[row]:a_row_ptr[row+1]-1
+    for i = a_row_ptr[row]:(a_row_ptr[row+1]-1)
         col = a_col_val[i]
         acc = add(acc, mul(a_nz_val[i], b[col], row, col, col, 1), row, col, col, 1)
         if acc == terminal_value
@@ -42,7 +42,7 @@ end
     entry_nb = @index(Global, Linear)
     row = mask[entry_nb]
     acc = monoid_neutral_element
-    for i = a_row_ptr[row]:a_row_ptr[row+1]-1
+    for i = a_row_ptr[row]:(a_row_ptr[row+1]-1)
         col = a_col_val[i]
         acc = add(acc, mul(a_nz_val[i], b[col], row, col, col, 1), row, col, col, 1)
         if acc == terminal_value
@@ -70,7 +70,7 @@ end
     row = @index(Global, Linear)
     if mask[row] != mask_zero
         acc = monoid_neutral_element
-        for i = a_row_ptr[row]:a_row_ptr[row+1]-1
+        for i = a_row_ptr[row]:(a_row_ptr[row+1]-1)
             col = a_col_val[i]
             acc = add(acc, mul(a_nz_val[i], b[col], row, col, col, 1), row, col, col, 1)
             if acc == terminal_value
@@ -95,11 +95,12 @@ end
     # Computes A*B and stores the result in C
     row = @index(Global, Linear)
     if mask[row] != mask_zero
-        for i = a_row_ptr[row]:a_row_ptr[row+1]-1
+        for i = a_row_ptr[row]:(a_row_ptr[row+1]-1)
             col = a_col_val[i]
             b_val = b[col]
             if b_val != zero(b_val)
-                c[row] = accum(c[row], mul(a_nz_val[i], b_val, row, col, col, 1), row, 1, row, 1)
+                c[row] =
+                    accum(c[row], mul(a_nz_val[i], b_val, row, col, col, 1), row, 1, row, 1)
                 break
             end
         end
@@ -242,7 +243,7 @@ end
     # Computes A*B and stores the result in C
     col = @index(Global, Linear)
     acc = monoid_neutral_element
-    for i = a_col_ptr[col]:a_col_ptr[col+1]-1
+    for i = a_col_ptr[col]:(a_col_ptr[col+1]-1)
         row = a_row_val[i]
         acc = mul(b[col], a_nz_val[i], row, col, col, 1)
         Atomix.@atomic c[row] += acc
@@ -304,7 +305,7 @@ end
     #offset = (row-1) % slice_size
     if row <= n
         start = a_slice_ptr[slice] + offset
-        stop = a_slice_ptr[slice + 1] - 1
+        stop = a_slice_ptr[slice+1] - 1
         acc = monoid_neutral_element
         for i = start:slice_size:stop
             col = a_col_val[i]
@@ -335,11 +336,11 @@ end
         offset = (row-1) % slice_size
 
         acc = monoid_neutral_element
-        for i = a_slice_ptr[slice] + offset:slice_size:a_slice_ptr[slice + 1] - 1
+        for i = (a_slice_ptr[slice]+offset):slice_size:(a_slice_ptr[slice+1]-1)
             col = a_col_val[i]
             acc = add(acc, mul(a_nz_val[i], b[col], row, col, col, 1), row, col, col, 1)
         end
-    c[row] = accum(c[row], acc, row, 1, row, 1)
+        c[row] = accum(c[row], acc, row, 1, row, 1)
     end
 end
 

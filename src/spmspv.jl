@@ -13,7 +13,7 @@
     # Computes A*B and stores the result in C using the semiring semiring.
     row = @index(Global, Linear)
     acc = monoid_neutral(eltype(a_nz_val), add)
-    for i = a_row_ptr[row]:a_row_ptr[row+1]-1
+    for i = a_row_ptr[row]:(a_row_ptr[row+1]-1)
         acc = add(acc, mul(b[a_col_val[i]], a_nz_val[i]))
         #acc = add(acc, mul(a_col_val[i], a_nz_val[i]))
     end

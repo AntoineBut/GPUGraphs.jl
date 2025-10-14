@@ -37,7 +37,7 @@ export AbstractSparseGPUMatrix,
     bfs_distances!,
     bfs_parents,
     bfs_parents!,
-    shortest_path, 
+    shortest_path,
     shortest_path!,
     GPUGraphs_add,
     GPUGraphs_mul,
@@ -46,7 +46,7 @@ export AbstractSparseGPUMatrix,
     GPUGraphs_bor,
     GPUGraphs_any,
     GPUGraphs_secondi,
-    GPUGraphs_max, 
+    GPUGraphs_max,
     GPUGraphs_min
 
 end
