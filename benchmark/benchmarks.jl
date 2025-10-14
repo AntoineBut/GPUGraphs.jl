@@ -65,10 +65,11 @@ for SIZE in SIZES
     A_csr_cpu = transpose(A_csc_cpu)
     print("Converting to GPU format\n")
     A_csr_gpu = SparseGPUMatrixCSR(A_csr_cpu, BACKEND)
-    A_ell_gpu = SparseGPUMatrixELL(A_csr_cpu, BACKEND)
+    A_sell_gpu = SparseGPUMatrixSELL(A_csr_cpu, BACKEND)
     print("Generating random vector of size $SIZE\n")
     b = rand(ELTYPE_B, SIZE)
-    b_gpu = MtlVector(b)
+    b_gpu = KernelAbstractions.zeros(BACKEND, ELTYPE_B, SIZE)
+    copyto!(b_gpu, b)
     print("Building GB sparse matrix\n")
     A_ssGB = gbrand(ELTYPE_A, SIZE, SIZE, FILL)
     b_ssGB = b
@@ -87,9 +88,9 @@ for SIZE in SIZES
     end evals = 1 setup =
         (res_gpu = KernelAbstractions.zeros(BACKEND, ELTYPE_RES, $SIZE))
 
-    SUITE["mul!"]["GPU"]["GPUGraphsELL"] = @benchmarkable begin
+    SUITE["mul!"]["GPU"]["GPUGraphsSELL"] = @benchmarkable begin
         for i = 1:10
-            gpu_spmv!(res_gpu, $A_ell_gpu, $b_gpu; mul = MUL, add = ADD, accum = ACCUM)
+            gpu_spmv!(res_gpu, $A_sell_gpu, $b_gpu; mul = MUL, add = ADD, accum = ACCUM)
         end
         KernelAbstractions.synchronize(BACKEND)
     end evals = 1 setup =
@@ -105,8 +106,8 @@ for SIZE in SIZES
         A_csr_cpu = transpose(A_csc_cpu)
         print("Converting to GPU-CSR format\n")
         A_csr_gpu = SparseGPUMatrixCSR(A_csr_cpu, BACKEND)
-        #print("Converting to ELL format\n")
-        #A_ell_gpu = SparseGPUMatrixELL(A_csr_cpu, BACKEND)
+        print("Converting to SELL format\n")
+        A_sell_gpu = SparseGPUMatrixSELL(A_csr_cpu, BACKEND)
 
         print("Building GB sparse matrix\n")
         A_ssGB = GBMatrix(
@@ -121,12 +122,12 @@ for SIZE in SIZES
             GPUGraphs.bfs_parents($A_csr_gpu, one(INDEX_TYPE))
             KernelAbstractions.synchronize(BACKEND)
         end evals = 1
-"""
-        SUITE["bfs"]["GPU"]["GPUGraphsELL"] = @benchmarkable begin
-            GPUGraphs.bfs_parents(*A_ell_gpu, one(INDEX_TYPE))
+
+        SUITE["bfs"]["GPU"]["GPUGraphsSELL"] = @benchmarkable begin
+            GPUGraphs.bfs_parents($A_sell_gpu, one(INDEX_TYPE))
             KernelAbstractions.synchronize(BACKEND)
         end evals = 1
-""" 
+
         SUITE["bfs"]["CPU"]["SuiteSparseGraphBLAS"] = @benchmarkable begin
             bfs_BLAS!($A_ssGB, one(INDEX_TYPE), res_ssGB)
         end evals = 1 setup = (res_ssGB = GBVector{INDEX_TYPE}($GSIZE, fill = zero(INDEX_TYPE)))
@@ -160,8 +161,8 @@ for SIZE in SIZES
         (
             "spmv!",
             SIZE,
-            "GPUGraphsELL",
-            median(bench_res["mul!"]["GPU"]["GPUGraphsELL"].times),
+            "GPUGraphsSELL",
+            median(bench_res["mul!"]["GPU"]["GPUGraphsSELL"].times),
         ),
     )
 
@@ -184,17 +185,15 @@ for SIZE in SIZES
                 median(bench_res["bfs"]["GPU"]["GPUGraphsCSR"].times),
             ),
         )
-"""
         push!(
             BFS_RESULTS,
             (
                 "bfs",
                 SIZE,
-                "GPUGraphsELL",
-                median(bench_res["bfs"]["GPU"]["GPUGraphsELL"].times),
+                "GPUGraphsSELL",
+                median(bench_res["bfs"]["GPU"]["GPUGraphsSELL"].times),
             ),
         )
-            """
         push!(
             BFS_RESULTS,
             (
@@ -218,18 +217,21 @@ println("Done. ")
 
 CSV.write("benchmark/out/spmv_results.csv", MUL_RESULTS)
 CSV.write("benchmark/out/bfs_results.csv", BFS_RESULTS)
+# Thow error to stop execution
+error("Stopping execution after synthetic benchmarks.")
+
 NB_DATASETS = 3
 
 ssmc = ssmc_db()
 orkut_path = fetch_ssmc(ssmc_matrices(ssmc, "SNAP", "Orkut"), format="RB")
-live_journal_path = fetch_ssmc(ssmc_matrices(ssmc, "SNAP", "com-LiveJournal"), format="RB")
+#live_journal_path = fetch_ssmc(ssmc_matrices(ssmc, "SNAP", "com-LiveJournal"), format="RB")
 osm_path = fetch_ssmc(ssmc_matrices(ssmc, "DIMACS10", "italy_osm"), format="RB") 
 nlpkkt_path = fetch_ssmc(ssmc_matrices(ssmc, "Schenk", "nlpkkt160"), format="RB")
 
-DATASET_NAMES = ["com-Orkut", "com-LiveJournal", "italy_osm", "nlpkkt160"]
+DATASET_NAMES = ["com-Orkut", "italy_osm", "nlpkkt160"]
 DATASET_PATHS = [
     orkut_path[1],
-    live_journal_path[1],
+    #live_journal_path[1],
     osm_path[1],
     nlpkkt_path[1],
 ]
@@ -281,7 +283,7 @@ for i = 1:NB_DATASETS
     println("Built graph. ")
 
     if i != 1
-        A_ell_gpu = SparseGPUMatrixELL(transpose(A_T), BACKEND)
+        A_sell_gpu = SparseGPUMatrixSELL(transpose(A_T), BACKEND)
     end
     b = rand(MAIN_TYPE, SIZE)
     b_ssGB = b
@@ -322,17 +324,17 @@ for i = 1:NB_DATASETS
 
     if i >= 2
 
-        SUITE2["mul!"]["GPU"]["GPUGraphsELL"] = @benchmarkable begin
+        SUITE2["mul!"]["GPU"]["GPUGraphsSELL"] = @benchmarkable begin
             for j = 1:10
-                gpu_spmv!(res_gpu, $A_ell_gpu, $b_gpu; mul = MUL, add = ADD, accum = ACCUM)
+                gpu_spmv!(res_gpu, $A_sell_gpu, $b_gpu; mul = MUL, add = ADD, accum = ACCUM)
             end
             KernelAbstractions.synchronize(BACKEND)
         end evals = 1 setup =
             (res_gpu = KernelAbstractions.zeros(BACKEND, ELTYPE_RES, $SIZE))
 
         if MAIN_TYPE == Bool
-            SUITE2["bfs"]["GPU"]["GPUGraphsELL"] = @benchmarkable begin
-                GPUGraphs.bfs_parents($A_ell_gpu, one(INDEX_TYPE))
+            SUITE2["bfs"]["GPU"]["GPUGraphsSELL"] = @benchmarkable begin
+                GPUGraphs.bfs_parents($A_sell_gpu, one(INDEX_TYPE))
                 KernelAbstractions.synchronize(BACKEND)
             end evals = 1
         end
@@ -408,8 +410,8 @@ for i = 1:NB_DATASETS
             (
                 "spmv!",
                 DATASET_NAMES[i],
-                "GPUGraphsELL",
-                median(bench_res2["mul!"]["GPU"]["GPUGraphsELL"].times),
+                "GPUGraphsSELL",
+                median(bench_res2["mul!"]["GPU"]["GPUGraphsSELL"].times),
             ),
         )
 
@@ -419,16 +421,16 @@ for i = 1:NB_DATASETS
                 (
                     "bfs",
                     DATASET_NAMES[i],
-                    "GPUGraphsELL",
-                    median(bench_res2["bfs"]["GPU"]["GPUGraphsELL"].times),
+                    "GPUGraphsSELL",
+                    median(bench_res2["bfs"]["GPU"]["GPUGraphsSELL"].times),
                 ),
             )
         end
 
     else
-        push!(DATA_MUL_RESULTS, ("spmv!", DATASET_NAMES[i], "GPUGraphsELL", 0))
+        push!(DATA_MUL_RESULTS, ("spmv!", DATASET_NAMES[i], "GPUGraphsSELL", 0))
         if MAIN_TYPE == Bool
-            push!(DATA_BFS_RESULTS, ("bfs", DATASET_NAMES[i], "GPUGraphsELL", 0))
+            push!(DATA_BFS_RESULTS, ("bfs", DATASET_NAMES[i], "GPUGraphsSELL", 0))
         end
     end
 end

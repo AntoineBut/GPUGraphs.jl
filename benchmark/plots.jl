@@ -3,8 +3,8 @@ using CSV
 using DataFrames
 
 # Load the data. Columns are operation, size, implementation, time
-df = DataFrame(CSV.File("benchmark/out/spmv_cusparse.csv"))
-df_bfs = DataFrame(CSV.File("benchmark/out/bfs_results_cuda.csv"))
+df = DataFrame(CSV.File("benchmark/out/spmv_results.csv"))
+df_bfs = DataFrame(CSV.File("benchmark/out/bfs_results.csv"))
 
 df[!, :time] /= 1e9  # convert ns to s
 df_bfs[!, :time] /= 1e9  # convert ns to s
@@ -52,23 +52,27 @@ savefig(p_bfs, "benchmark/out/plot_bfs_results.png")
 # Get the times
 ssgb_times = df[df.implementation.=="SuiteSparseGraphBLAS", :time]
 csr_gpu_times = df[df.implementation.=="GPUGraphsCSR", :time]
-ell_gpu_times = df[df.implementation.=="GPUGraphsELL", :time]
-cusparse_csr_times = df[df.implementation.=="CUSPARSE-CSR", :time]
-cusparse_csc_times = df[df.implementation.=="CUSPARSE-CSC", :time]
+ell_gpu_times = df[df.implementation.=="GPUGraphsSELL", :time]
+#cusparse_csr_times = df[df.implementation.=="CUSPARSE-CSR", :time]
+#cusparse_csc_times = df[df.implementation.=="CUSPARSE-CSC", :time]
 
 
 
 # Calculate the speedup
 speedup_csr = ssgb_times ./ csr_gpu_times
 speedup_ell = ssgb_times ./ ell_gpu_times
-speedup_cusparse_csr = ssgb_times ./ cusparse_csr_times
-speedup_cusparse_csc = ssgb_times ./ cusparse_csc_times
+#speedup_cusparse_csr = ssgb_times ./ cusparse_csr_times
+#speedup_cusparse_csc = ssgb_times ./ cusparse_csc_times
 
 # Plot the speedup
 speedup_plot = plot(
     unique(df.size),
-    [speedup_csr, speedup_ell, speedup_cusparse_csr, speedup_cusparse_csc],
-    label = ["CSR" "ELL" "CuSparse-CSR" "CuSparse-CSC"],
+    [speedup_csr, speedup_ell, 
+    #speedup_cusparse_csr, speedup_cusparse_csc
+    ],
+    label = ["CSR" "SELL" 
+    #"CuSparse-CSR" "CuSparse-CSC"
+    ],
     xlabel = "Size",
     ylabel = "Speedup",
     title = "Speedup of GPU spmv relative to SSBG",
@@ -85,7 +89,7 @@ graphsjl_times = df_bfs[df_bfs.implementation.=="Graphs.jl", :time]
 
 ssgb_times = df_bfs[df_bfs.implementation.=="SuiteSparseGraphBLAS", :time]
 csr_gpu_times = df_bfs[df_bfs.implementation.=="GPUGraphsCSR", :time]
-ell_gpu_times = df_bfs[df_bfs.implementation.=="GPUGraphsELL", :time]
+ell_gpu_times = df_bfs[df_bfs.implementation.=="GPUGraphsSELL", :time]
 
 # Calculate the speedup
 speedup_ssgb = graphsjl_times ./ ssgb_times
