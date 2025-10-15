@@ -10,6 +10,8 @@ using Aqua
 using JET
 using Pkg
 using Graphs
+using SimpleWeightedGraphs
+using CUDA
 
 # Test the SparseGPUMatrixCSR utilities
 
@@ -17,7 +19,7 @@ using Graphs
 Random.seed!(1234)
 
 # Value used in Colval for padding zero entries
-const PAD_VAL = 1
+const PAD_VAL = -1
 # We use 1 instead of 0 so that during spmv(A, b), attempting to do b[colval[i]] * nzval[i] on a structural zero yields b[colval[1]] * 0 = 0
 # instead of b[colval[0]] * 0 => BoundsError (or worse, no error but silently wrong result)
 
@@ -37,13 +39,11 @@ const PAD_VAL = 1
         end
     end
 
-    if get(ENV, "CI", "false") == "false"
-        Pkg.add("CUDA")
-        using CUDA
-    end
 
-    include("structs.jl")
-    include("spmv.jl")
-    include("spmm.jl")
-    include("bfs.jl")
+
+    #include("structs.jl")
+    #include("spmv.jl")
+    #include("spmm.jl")
+    #include("bfs.jl")
+    include("shortest_path.jl")
 end

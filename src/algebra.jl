@@ -42,6 +42,12 @@ GPUGraphs_pair(x, y, _, _, _, _) = ifelse(y != zero(y), one(x), zero(x))
 
 GPUGraphs_add(x, y, _, _, _, _) = x + y
 monoid_neutral(::Type{T}, ::typeof(GPUGraphs_add)) where {T} = zero(T)
+monoid_absorb(::Type{T}, ::typeof(GPUGraphs_add)) where {T} = typemax(T)
+
+GPUGraphs_safe_add(x, y, _, _, _, _) =
+    ifelse(max(x, y) == max(typemax(x), typemax(y)), max(typemax(x), typemax(y)), x + y)
+monoid_neutral(::Type{T}, ::typeof(GPUGraphs_safe_add)) where {T} = zero(T)
+monoid_absorb(::Type{T}, ::typeof(GPUGraphs_safe_add)) where {T} = typemax(T)
 
 GPUGraphs_minus(x, y, _, _, _, _) = x - y
 GPUGraphs_rminus(x, y, _, _, _, _) = y - x

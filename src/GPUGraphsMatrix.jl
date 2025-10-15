@@ -242,7 +242,7 @@ mutable struct SparseGPUMatrixSELL{
                 ArgumentError("length(colval) and length(nzval) must be equal to n_stored"),
             )
         end
-        if !isempty(colval) && (maximum(colval) > n || minimum(colval) < 0)
+        if !isempty(colval) && (maximum(colval) > n || minimum(colval) < -1)
             throw(ArgumentError("colval contains an index out of bounds"))
         end
 
@@ -325,7 +325,9 @@ function SparseGPUMatrixSELL(
         slice_end = min(slice * slice_size, size(m_t, 2))
         # Fill the padded sub-matrix for each slice in Row-Major order
         max_nnz = max_nnz_per_slice[slice]
-        temp_colval = ones(Ti, slice_size, max_nnz)
+
+        ### Padding for vals is 0 and for col indices is -1 (invalid index)
+        temp_colval = ones(Ti, slice_size, max_nnz) .* -1
         temp_nzval = zeros(Tv, slice_size, max_nnz)
         for row = slice_start:slice_end
             if row > size(m_t, 2)

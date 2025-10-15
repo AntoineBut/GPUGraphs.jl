@@ -146,8 +146,8 @@ function gpu_spmv!(
             A.colval,
             A.nzval,
             B,
-            monoid_neutral(Tv, add),
-            monoid_absorb(Tv, add),
+            monoid_neutral(promote_type(Tv, InputType), add),
+            monoid_absorb(promote_type(Tv, InputType), add),
             mul,
             add,
             accum;
@@ -177,8 +177,8 @@ function gpu_spmv!(
             A.colval,
             A.nzval,
             B,
-            monoid_neutral(Tv, add),
-            monoid_absorb(Tv, add),
+            monoid_neutral(promote_type(Tv, InputType), add),
+            monoid_absorb(promote_type(Tv, InputType), add),
             mask.nzind,
             mul,
             add,
@@ -214,8 +214,8 @@ function gpu_spmv!(
             A.colval,
             A.nzval,
             B,
-            monoid_neutral(Tv, add),
-            monoid_absorb(Tv, add),
+            monoid_neutral(promote_type(Tv, InputType), add),
+            monoid_absorb(promote_type(Tv, InputType), add),
             mask,
             zero(Tmask),
             mul,
@@ -251,13 +251,20 @@ end
 end
 
 function gpu_spmv!(
-    C::AV,
+    C::ResVec,
     A::SparseGPUMatrixCSC{Tv,Ti},
-    B::AV;
+    B::InputVec;
     mul::Function = GPUGraphs_mul,
     add::Function = GPUGraphs_add,
     accum::Function = GPUGraphs_second,
-) where {Tv,Ti,AV<:AbstractVector{Tv}}
+) where {
+    Tv,
+    Ti,
+    ResType<:Number,
+    InputType<:Number,
+    ResVec<:AbstractVector{ResType},
+    InputVec<:AbstractVector{InputType},
+}
     # Computes A*B and stores the result in C
     # Check dimensions
     if size(A, 2) != length(B)
@@ -275,7 +282,7 @@ function gpu_spmv!(
         A.rowval,
         A.nzval,
         B,
-        monoid_neutral(Tv, add),
+        monoid_neutral(promote_type(Tv, InputType), add),
         mul,
         add,
         accum;
@@ -297,18 +304,21 @@ end
     add,
     accum,
 )
-    offset, slice = @index(Global, NTuple)
-    offset = offset - 1
-    row = (slice-1) * slice_size + offset + 1
-    #row = @index(Global, Linear)
-    #slice = (row-1) ÷ slice_size + 1
-    #offset = (row-1) % slice_size
+    #offset, slice = @index(Global, NTuple)
+    #offset = offset - 1
+    #row = (slice-1) * slice_size + offset + 1
+    row = @index(Global, Linear)
+    slice = (row-1) ÷ slice_size + 1
+    offset = (row-1) % slice_size
     if row <= n
         start = a_slice_ptr[slice] + offset
         stop = a_slice_ptr[slice+1] - 1
         acc = monoid_neutral_element
         for i = start:slice_size:stop
             col = a_col_val[i]
+            if col == -1
+                break
+            end
             acc = add(acc, mul(a_nz_val[i], b[col], row, col, col, 1), row, col, col, 1)
         end
         c[row] = accum(c[row], acc, row, 1, row, 1)
@@ -338,6 +348,9 @@ end
         acc = monoid_neutral_element
         for i = (a_slice_ptr[slice]+offset):slice_size:(a_slice_ptr[slice+1]-1)
             col = a_col_val[i]
+            if col == -1
+                break
+            end
             acc = add(acc, mul(a_nz_val[i], b[col], row, col, col, 1), row, col, col, 1)
         end
         c[row] = accum(c[row], acc, row, 1, row, 1)
@@ -399,7 +412,7 @@ function gpu_spmv!(
             A.slice_size,
             A.n,
             B,
-            monoid_neutral(Tv, add),
+            monoid_neutral(promote_type(Tv, InputType), add),
             mask,
             zero(Tmask),
             mul,
@@ -419,11 +432,11 @@ function gpu_spmv!(
         A.slice_size,
         A.n,
         B,
-        monoid_neutral(Tv, add),
+        monoid_neutral(promote_type(Tv, InputType), add),
         mul,
         add,
         accum;
-        ndrange = (A.slice_size, A.nslices),
+        ndrange = size(A, 1),
     )
 end
 

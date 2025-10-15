@@ -85,55 +85,155 @@ res_gpu1 = KernelAbstractions.zeros(BACKEND, Bool, SIZE)
 res_gpu2 = KernelAbstractions.zeros(BACKEND, Bool, SIZE)
 res_gpu3 = KernelAbstractions.zeros(BACKEND, Bool, SIZE)
 
-gpu_spmv!(res_gpu1, A_ell_gpu, b_gpu, &, |, |)
+gpu_spmv!(res_gpu1,A_ell_gpu,b_gpu,&,|,|)
 KernelAbstractions.synchronize(BACKEND)
 
 using SuiteSparseGraphBLAS
 import SuiteSparseGraphBLAS: ∧, ∨
 using ParallelGraphs
 
+using Revise
 
+using SparseArrays
 using GPUGraphs
 using BenchmarkTools
-using Metal
+using CUDA
 using KernelAbstractions
-
+using LinearAlgebra
 
 using Graphs
 using GraphIO.EdgeList
+using SuiteSparseMatrixCollection
+using HarwellRutherfordBoeing
 
 
 MAIN_TYPE = Bool
-graph = SimpleGraph(loadgraph("benchmark/data/com-Orkut/com-Orkut.mtx", EdgeListFormat()))
-#graph = dorogovtsev_mendes(10)
-A = convert(
-    SparseMatrixCSC{MAIN_TYPE,Int32},
-    adjacency_matrix(graph, MAIN_TYPE; dir = :out),
+#MAIN_TYPE = Float32
+BACKEND = CUDA.CUDABackend()
+
+ssmc = ssmc_db();
+orkut_path = fetch_ssmc(ssmc_matrices(ssmc, "SNAP", "Orkut"), format = "RB")[1]
+loaded_matrix = RutherfordBoeingData(joinpath(orkut_path, "com-Orkut.rb"));
+graph = SimpleDiGraph(loaded_matrix.data)
+
+#graph = dorogovtsev_mendes(150)
+A_cpu = transpose(
+    convert(
+        SparseMatrixCSC{MAIN_TYPE,Int32},
+        adjacency_matrix(graph, MAIN_TYPE; dir = :both),
+    ),
 )
-SIZE = size(A, 1)
+#A2 = convert(
+#    SparseMatrixCSC{Bool,Int32},
+#    adjacency_matrix(graph, Bool; dir = :both),
+#)
 
-A_T_gpu = SparseGPUMatrixCSR(transpose(A), Metal.MetalBackend())
-A_T = GBMatrix{Bool}((adjacency_matrix(graph, Bool; dir=:in))) 
+#A_T_gpu2 = SparseGPUMatrixCSR(transpose(A2), BACKEND)
+SIZE = size(A_cpu, 2)
+SIZE_2 = 32
 
-p = GBVector{Int}(SIZE; fill=zero(Int))
+B_cpu = rand(MAIN_TYPE, SIZE, SIZE_2);
+b_cpu = B_cpu[:, 1];
+C_cpu = zeros(MAIN_TYPE, SIZE, SIZE_2);
+
+A_T = SparseGPUMatrixSELL(A_cpu, BACKEND)
+A_T2 = SparseGPUMatrixCSR(A_cpu, BACKEND)
+B = KernelAbstractions.zeros(BACKEND, MAIN_TYPE, SIZE, SIZE_2);
+copyto!(B, B_cpu);
+b = KernelAbstractions.zeros(BACKEND, MAIN_TYPE, SIZE);
+copyto!(b, b_cpu);
+C = KernelAbstractions.zeros(BACKEND, MAIN_TYPE, SIZE, SIZE_2);
+c = KernelAbstractions.zeros(BACKEND, MAIN_TYPE, SIZE);
+
+mask = rand(Bool, SIZE)
+mask_dense = KernelAbstractions.zeros(BACKEND, Bool, SIZE)
+copyto!(mask_dense, mask)
+
+@benchmark begin
+    mul!(C_cpu, A_cpu, B_cpu)
+end
+
+@benchmark begin
+    gpu_spmm!(C, A_T2, B)
+
+    CUDA.synchronize()
+end
+
+C_res = zeros(MAIN_TYPE, SIZE, SIZE_2);
+copyto!(C_res, C);
+isapprox(C_cpu, C_res)
+
+@benchmark begin
+    for _ = 1:SIZE_2
+        gpu_spmv!(c, A_T, b, mask = mask_dense)
+    end
+    CUDA.synchronize()
+end
+c_res = zeros(MAIN_TYPE, SIZE);
+copyto!(c_res, c);
+c_cpu = A_cpu * b_cpu .* mask;
+isapprox(c_cpu, c_res)
+
+
+@benchmark begin
+    for i = 1:5
+        res1 = GPUGraphs.bfs_distances(A_T_gpu2, Int32(1))
+    end
+    KernelAbstractions.synchronize(BACKEND)
+end
+mat_res = zeros(Int32, SIZE, SIZE_2)
+vec_res = zeros(Int32, SIZE, SIZE_2)
+
+### quick test
+mat_res = GPUGraphs.shortest_path(A_T, convert(Vector{Int32}, range(1, SIZE_2)));
+for i = 1:SIZE_2
+    temp = GPUGraphs.shortest_path(A_T, Int32(i));
+    temp_cpu = zeros(Int32, SIZE)
+    copyto!(temp_cpu, temp)
+    vec_res[:, i] = temp_cpu
+end
+KernelAbstractions.synchronize(BACKEND)
+
+mat_res_cpu = zeros(Int32, SIZE, SIZE_2)
+copyto!(mat_res_cpu, mat_res)
+isapprox(mat_res_cpu, vec_res)
+
+
+
+@benchmark begin
+    mat_res = GPUGraphs.shortest_path(A_T2, convert(Vector{Int32}, range(1, SIZE_2)));
+    KernelAbstractions.synchronize(BACKEND)
+end
+
+@benchmark begin
+    for i = 1:SIZE_2
+        temp = GPUGraphs.shortest_path(A_T, Int32(i));
+        KernelAbstractions.synchronize(BACKEND)
+    end
+end
+
+
+A_T = GBMatrix{Bool}((adjacency_matrix(graph, Bool; dir = :in)))
+
+p = GBVector{Int}(SIZE; fill = zero(Int))
 
 Metal.@capture begin
-#@benchmark begin
+    #@benchmark begin
     GPUGraphs.bfs_distances(A_T_gpu, Int32(1))
-    KernelAbstractions.synchronize(Metal.MetalBackend())
+    KernelAbstractions.synchronize(BACKEND)
     GPUGraphs.bfs_parents(A_T_gpu, Int32(1))
-    KernelAbstractions.synchronize(Metal.MetalBackend())
+    KernelAbstractions.synchronize(BACKEND)
 end
 #end
 
 @benchmark begin
     GPUGraphs.bfs_distances(A_T_gpu, Int32(1))
-    KernelAbstractions.synchronize(Metal.MetalBackend())
-end 
+    KernelAbstractions.synchronize(BACKEND)
+end
 
 @benchmark begin
     GPUGraphs.bfs_parents(A_T_gpu, Int32(1))
-    KernelAbstractions.synchronize(Metal.MetalBackend())
+    KernelAbstractions.synchronize(BACKEND)
 end
 
 @benchmark begin
@@ -145,4 +245,21 @@ end
 
 @benchmark begin
     ParallelGraphs.bfs_BLAS!(A_T, 1, p)
-end eval = 1 setup = (p = GBVector{Int}(SIZE; fill=zero(Int)))
+end eval = 1 setup = (p = GBVector{Int}(SIZE; fill = zero(Int)))
+
+
+using CUDA
+# Stress GPU test_kernel
+
+
+SIZE = 32000
+A = CUDA.rand(Float32, SIZE, SIZE)
+B = CUDA.rand(Float32, SIZE, SIZE)
+res = CUDA.zeros(Float32, SIZE, SIZE)
+
+@time for i = 1:100
+    @. res = exp(A) * sin(B) + cos(A) * tan(B) * (exp(B) + sin(A) * cos(B))
+    @. res = res / (exp(A) + sin(B) + cos(A) + tan(B) + 1)
+end
+
+CUDA.synchronize()
