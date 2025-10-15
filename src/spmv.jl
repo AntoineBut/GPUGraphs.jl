@@ -340,78 +340,20 @@ end
     add,
     accum,
 )
-<<<<<<< HEAD
-    offset, slice = @index(Global, NTuple)
-    offset = offset - 1
-    row = (slice-1) * slice_size + offset + 1
-=======
     row = @index(Global, Linear)
     if mask[row] != mask_zero
         slice = (row-1) ÷ slice_size + 1
         offset = (row-1) % slice_size
->>>>>>> 529f0b3f36878c21f23c4fcd919710aa8ef54064
 
-    if row <= n && mask[row] != mask_zero
-        start = a_slice_ptr[slice] + offset
-        stop = a_slice_ptr[slice + 1] - 1
         acc = monoid_neutral_element
-<<<<<<< HEAD
-        for i = start:slice_size:stop
-            #if i > length(a_nz_val)
-            #    break
-            #end
-            col = a_col_val[i]
-            if col == 0 # This is a padding value. The remaining values are all 0
-=======
         for i = (a_slice_ptr[slice]+offset):slice_size:(a_slice_ptr[slice+1]-1)
             col = a_col_val[i]
             if col == -1
->>>>>>> 529f0b3f36878c21f23c4fcd919710aa8ef54064
                 break
             end
             acc = add(acc, mul(a_nz_val[i], b[col], row, col, col, 1), row, col, col, 1)
         end
         c[row] = accum(c[row], acc, row, 1, row, 1)
-<<<<<<< HEAD
-    end
-end
-
-@kernel function any_dense_masked_sell_spmv_kernel!(
-    c,
-    @Const(a_col_val),
-    @Const(a_nz_val),
-    @Const(a_slice_ptr),
-    @Const(slice_size),
-    @Const(n),
-    @Const(b),
-    @Const(mask),
-    @Const(mask_zero),
-    mul,
-    accum,
-)
-    offset, slice = @index(Global, NTuple)
-    offset = offset - 1
-    row = (slice-1) * slice_size + offset + 1
-
-    if row <= n && mask[row] != mask_zero
-        start = a_slice_ptr[slice] + offset
-        stop = a_slice_ptr[slice + 1] - 1
-        for i = start:slice_size:stop
-            #if i > length(a_nz_val)
-            #    break
-            #end
-            col = a_col_val[i]
-            if col == 0 # This is a padding value. The remaining values are all 0
-                break
-            end
-            b_val = b[col]
-            if b_val != zero(b_val)
-                c[row] = accum(c[row], mul(a_nz_val[i], b_val, row, col, col, 1), row, 1, row, 1)
-                break
-            end
-        end
-=======
->>>>>>> 529f0b3f36878c21f23c4fcd919710aa8ef54064
     end
 end
 
@@ -446,11 +388,6 @@ function gpu_spmv!(
     # Call the kernel
     backend = get_backend(A)
 
-<<<<<<< HEAD
-    # No mask
-    if mask === nothing
-        kernel! = sell_spmv_kernel!(backend)
-=======
     # Using mask 
     if mask !== nothing
         # Check mask type
@@ -467,7 +404,6 @@ function gpu_spmv!(
         end
 
         kernel! = dense_masked_sell_spmv_kernel!(backend)
->>>>>>> 529f0b3f36878c21f23c4fcd919710aa8ef54064
         kernel!(
             C,
             A.colval,
@@ -476,76 +412,32 @@ function gpu_spmv!(
             A.slice_size,
             A.n,
             B,
-<<<<<<< HEAD
-            monoid_neutral(Tv, add),
-            mul,
-            add,
-            accum;
-            ndrange = (A.slice_size, A.nslices),
-        )
-        return
-    end
-
-    # Check mask type
-    if !(typeof(mask) <: AbstractVector{Tmask})
-        throw(DimensionMismatch("Mask must be a vector"))
-    end
-    # Check mask length
-    if length(mask) != size(A, 1)
-        throw(DimensionMismatch("Mask length must be equal to the number of rows in A"))
-    end
-    # Check mask backend
-    if get_backend(mask) != backend
-        throw(ArgumentError("Mask must be on the same backend as A"))
-    end
-
-    # Any operator 
-    if add == GPUGraphs_any
-        kernel! = any_dense_masked_sell_spmv_kernel!(backend)
-        kernel!(
-            C,
-            A.colval,
-            A.nzval,
-            A.slice_ptr,
-            A.slice_size,
-            A.n,
-            B,
-=======
             monoid_neutral(promote_type(Tv, InputType), add),
->>>>>>> 529f0b3f36878c21f23c4fcd919710aa8ef54064
             mask,
             zero(Tmask),
             mul,
+            add,
             accum;
-            ndrange = (A.slice_size, A.nslices),
+            ndrange = size(A, 1),
         )
         return
     end
 
-    kernel! = dense_masked_sell_spmv_kernel!(backend)
+    kernel! = sell_spmv_kernel!(backend)
     kernel!(
         C,
         A.colval,
         A.nzval,
         A.slice_ptr,
         A.slice_size,
+        A.n,
         B,
-<<<<<<< HEAD
-        monoid_neutral(Tv, add),
-        mask,
-        zero(Tmask),
-=======
         monoid_neutral(promote_type(Tv, InputType), add),
->>>>>>> 529f0b3f36878c21f23c4fcd919710aa8ef54064
         mul,
         add,
         accum;
         ndrange = size(A, 1),
     )
-    return
-    
-
-    
 end
 
 
