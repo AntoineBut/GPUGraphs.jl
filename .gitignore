@@ -29,3 +29,8 @@ Manifest.toml
 # Datasets used for benchmarking
 /benchmark/data/
 /benchmark/out
+
+# .vscode directory for VS Code workspace settings
+.vscode/
+# macOS system files
+*.DS_Store

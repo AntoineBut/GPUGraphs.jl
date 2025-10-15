@@ -41,7 +41,7 @@ p_bfs = @df df_bfs plot(
     legend = :topleft,
     yscale = :log10,
     xscale = :log10,
-    yticks = [10^i for i in -6.0:1.0],
+    yticks = [10^i for i = -6.0:1.0],
     ylim = (1e-5, 1e+1),
 )
 display(p_bfs)
@@ -50,24 +50,25 @@ savefig(p_bfs, "benchmark/out/plot_bfs_results.png")
 # Plot the speedup relative to the SuiteSparseGraphBLAS implementation
 
 # Get the times
-julia_times = df[df.implementation.=="JuliaSparse", :time]
+ssgb_times = df[df.implementation.=="SuiteSparseGraphBLAS", :time]
 csr_gpu_times = df[df.implementation.=="GPUGraphsCSR", :time]
-sell_gpu_times = df[df.implementation.=="GPUGraphsSELL", :time]
+ell_gpu_times = df[df.implementation.=="GPUGraphsELL", :time]
 cusparse_csr_times = df[df.implementation.=="CUSPARSE-CSR", :time]
+cusparse_csc_times = df[df.implementation.=="CUSPARSE-CSC", :time]
 
 
 
 # Calculate the speedup
-speedup_julia = julia_times ./ julia_times  # This will always be 1
-speedup_csr = julia_times ./ csr_gpu_times
-speedup_sell = julia_times ./ sell_gpu_times
-speedup_cusparse_csr = julia_times ./ cusparse_csr_times
+speedup_csr = ssgb_times ./ csr_gpu_times
+speedup_ell = ssgb_times ./ ell_gpu_times
+speedup_cusparse_csr = ssgb_times ./ cusparse_csr_times
+speedup_cusparse_csc = ssgb_times ./ cusparse_csc_times
 
 # Plot the speedup
 speedup_plot = plot(
     unique(df.size),
-    [speedup_csr, speedup_sell, speedup_cusparse_csr],
-    label = ["CSR" "SELL" "CuSparse-CSR"],
+    [speedup_csr, speedup_ell, speedup_cusparse_csr, speedup_cusparse_csc],
+    label = ["CSR" "ELL" "CuSparse-CSR" "CuSparse-CSC"],
     xlabel = "Size",
     ylabel = "Speedup",
     title = "Speedup of SpMV relative to JuliaSparse \n Square Matrix",
@@ -80,11 +81,11 @@ display(speedup_plot)
 savefig(speedup_plot, "benchmark/out/plot_spmv_speedup.png")
 #"""
 # Get the times
-graphsjl_times = df_bfs[df_bfs.implementation.=="Graphs.jl", :time]
+graphsjl_times = df_bfs[df_bfs.implementation .== "Graphs.jl", :time]
 
 ssgb_times = df_bfs[df_bfs.implementation.=="SuiteSparseGraphBLAS", :time]
 csr_gpu_times = df_bfs[df_bfs.implementation.=="GPUGraphsCSR", :time]
-sell_gpu_times = df_bfs[df_bfs.implementation.=="GPUGraphsSELL", :time]
+ell_gpu_times = df_bfs[df_bfs.implementation.=="GPUGraphsELL", :time]
 
 # Calculate the speedup
 speedup_ssgb = graphsjl_times ./ ssgb_times
@@ -114,9 +115,9 @@ df2[!, :time] /= 1e9  # convert ns to s
 df2_bfs = DataFrame(CSV.File("benchmark/out/bfs_results_data.csv"))
 df2_bfs[!, :time] /= 1e9  # convert ns to s
 
-# For each dataset, normalize the time by the time of the Julia implementation
-julia_times = df2[df2.implementation.=="JuliaSparse", :time]
-julia_times_column = repeat(julia_times, inner = 4)
+# For each dataset, normalize the time by the time of the SuiteSparseGraphBLAS implementation
+gb_times = df2[df2.implementation.=="CUSPARSE-CSR", :time]
+gb_times_column = repeat(gb_times, inner = 4)
 # Normalize the time by the SuiteSparseGraphBLAS time
 df2[!, :time] = julia_times_column ./ df2[!, :time]
 
@@ -151,7 +152,7 @@ display(p2)
 #"""
 # Plot the BFS data
 # For each dataset, normalize the time by the time of the SuiteSparseGraphBLAS implementation
-graphsjl_times_bfs = df2_bfs[df2_bfs.implementation.=="Graphs.jl", :time]
+graphsjl_times_bfs = df2_bfs[df2_bfs.implementation .== "Graphs.jl", :time]
 graphsjl_times_column_bfs = repeat(graphsjl_times_bfs, inner = 4)
 # Normalize the time by the SuiteSparseGraphBLAS time
 df2_bfs[!, :time] = df2_bfs[!, :time] ./ graphsjl_times_column_bfs
@@ -166,6 +167,7 @@ p2_bfs = @df df2_bfs bar(
     xticks = (2:4:13, unique(df2_bfs.dataset)),
     legend = :topleft,
     title = "BFS",
+    ylim = (0, 1),
 
 )
 # Add the speedup

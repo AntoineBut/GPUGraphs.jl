@@ -7,7 +7,8 @@ Return the neutral element of the operation `op` for the type `T`.
 """
 # If someone tries to use this function with a type that is not supported, it will throw an error
 # to indicate this operation does not have a neutral element and thus cannot be used as a monoid.
-monoid_neutral(type::Type, op::Function) = error("monoid_neutral not implemented for type $(type) and operation $(op)")
+monoid_neutral(type::Type, op::Function) =
+    error("monoid_neutral not implemented for type $(type) and operation $(op)")
 # If someone tries to use this function with a type that is not supported, 
 # it will return nothing to indicate this monoid does not have an absorbing element.
 monoid_absorb(type::Any, op::Any) = nothing
@@ -33,7 +34,7 @@ GPUGraphs_second(_, y, _, _, _, _) = y
 
 GPUGraphs_any(x, y, _, _, _, _) = max(x, y)
 monoid_neutral(::Type{T}, ::typeof(GPUGraphs_any)) where {T} = zero(T)
-monoid_absorb(::Type{T}, ::typeof(GPUGraphs_any)) where {T} = Any 
+monoid_absorb(::Type{T}, ::typeof(GPUGraphs_any)) where {T} = Any
 # TODO : make short-circuiting
 
 GPUGraphs_pair(x, y, _, _, _, _) = ifelse(y != zero(y), one(x), zero(x))
@@ -41,6 +42,12 @@ GPUGraphs_pair(x, y, _, _, _, _) = ifelse(y != zero(y), one(x), zero(x))
 
 GPUGraphs_add(x, y, _, _, _, _) = x + y
 monoid_neutral(::Type{T}, ::typeof(GPUGraphs_add)) where {T} = zero(T)
+monoid_absorb(::Type{T}, ::typeof(GPUGraphs_add)) where {T} = typemax(T)
+
+GPUGraphs_safe_add(x, y, _, _, _, _) =
+    ifelse(max(x, y) == max(typemax(x), typemax(y)), max(typemax(x), typemax(y)), x + y)
+monoid_neutral(::Type{T}, ::typeof(GPUGraphs_safe_add)) where {T} = zero(T)
+monoid_absorb(::Type{T}, ::typeof(GPUGraphs_safe_add)) where {T} = typemax(T)
 
 GPUGraphs_minus(x, y, _, _, _, _) = x - y
 GPUGraphs_rminus(x, y, _, _, _, _) = y - x

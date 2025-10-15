@@ -8,7 +8,7 @@ function bfs_distances(
     # Tv is typically Bool
     curr = KernelAbstractions.zeros(backend, Tv, size(A_T, 1))
     next = KernelAbstractions.zeros(backend, Tv, size(A_T, 1))
-    to_explore = KernelAbstractions.ones(backend, Tv, size(A_T, 1))
+    to_explore = KernelAbstractions.ones(backend, Ti, size(A_T, 1))
 
 
     # Ti is typically Int32, and is guaranteed to be able to hold the size of the matrix
@@ -34,7 +34,7 @@ function bfs_distances!(
     dist::TVi,
     curr::TVv,
     next::TVv,
-    to_explore::TVv,
+    to_explore::TVi,
 ) where {
     Tv,
     Ti<:Integer,
@@ -47,7 +47,6 @@ function bfs_distances!(
     @allowscalar to_explore[source] = zero(Tv)
     iter = zero(Ti)
     next .= zero(Tv)
-
     while true
         iter += one(Ti)
         gpu_spmv!(

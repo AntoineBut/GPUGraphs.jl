@@ -162,7 +162,7 @@ function Base.getindex(A::SparseGPUMatrixCSR, i::Int, j::Int)
     if i < 1 || i > A.m || j < 1 || j > A.n
         throw(BoundsError(A, (i, j)))
     end
-    col = findfirst(A.colval[A.rowptr[i]:A.rowptr[i+1]-1] .== j)
+    col = findfirst(A.colval[A.rowptr[i]:(A.rowptr[i+1]-1)] .== j)
     if col === nothing
         return zero(eltype(A.nzval))
     else
@@ -174,7 +174,7 @@ function Base.setindex!(A::SparseGPUMatrixCSR, v, i::Int, j::Int)
     if i < 1 || i > A.m || j < 1 || j > A.n
         throw(BoundsError(A, (i, j)))
     end
-    col = findfirst(A.colval[A.rowptr[i]:A.rowptr[i+1]-1] .== j)
+    col = findfirst(A.colval[A.rowptr[i]:(A.rowptr[i+1]-1)] .== j)
     if col === nothing
         throw(
             ArgumentError(
@@ -213,7 +213,7 @@ mutable struct SparseGPUMatrixSELL{
     colval::Gi
     nzval::Gv
     """
-        Constructors for a SparseGPUMatrixELL
+        Constructors for a SparseGPUMatrixSELL
         
     """
     function SparseGPUMatrixSELL(
@@ -238,9 +238,11 @@ mutable struct SparseGPUMatrixSELL{
             throw(ArgumentError("length(slice_ptr) must be equal to nslices+1"))
         end
         if length(colval) != length(nzval) || length(colval) != n_stored
-            throw(ArgumentError("length(colval) and length(nzval) must be equal to n_stored"))
+            throw(
+                ArgumentError("length(colval) and length(nzval) must be equal to n_stored"),
+            )
         end
-        if !isempty(colval) && (maximum(colval) > n || minimum(colval) < 0)
+        if !isempty(colval) && (maximum(colval) > n || minimum(colval) < -1)
             throw(ArgumentError("colval contains an index out of bounds"))
         end
 
@@ -282,23 +284,22 @@ function SparseGPUMatrixSELL(
     m::Matrix{Tv},
     backend::Backend,
     slice_size::Int = 32,
-
     ::Type{Ti} = Int32,
 ) where {Tv,Ti<:Integer}
     sparse_matrix_csc = convert(SparseMatrixCSC{Tv,Ti}, sparse(m))
-    SparseGPUMatrixSELL(sparse_matrix_csc, slice_size, backend)
+    SparseGPUMatrixSELL(sparse_matrix_csc, backend, slice_size)
 end
 
 function SparseGPUMatrixSELL(
     m::Transpose{Tv,<:SparseMatrixCSC{Tv,Ti}},
-    slice_size::Int,
     backend::Backend,
+    slice_size::Int = 32,
 ) where {Tv,Ti<:Integer}
     m_t = m.parent
     rowptr = m_t.colptr
     colval = m_t.rowval
     nzval = m_t.nzval
-    
+    slice_size = min(slice_size, size(m_t, 2))
     n_slices = ceil(Int, size(m_t, 2) / slice_size)
     max_nnz_per_slice = zeros(Int, n_slices)
     nnz_per_row = diff(rowptr)
@@ -316,7 +317,7 @@ function SparseGPUMatrixSELL(
     slice_ptr = zeros(Ti, n_slices + 1)
     slice_ptr[1] = 1
     for i = 1:n_slices
-        slice_ptr[i + 1] = slice_ptr[i] + max_nnz_per_slice[i] * slice_size
+        slice_ptr[i+1] = slice_ptr[i] + max_nnz_per_slice[i] * slice_size
     end
 
     for slice = 1:n_slices
@@ -324,22 +325,24 @@ function SparseGPUMatrixSELL(
         slice_end = min(slice * slice_size, size(m_t, 2))
         # Fill the padded sub-matrix for each slice in Row-Major order
         max_nnz = max_nnz_per_slice[slice]
-        temp_colval = zeros(Ti, slice_size, max_nnz)
+
+        ### Padding for vals is 0 and for col indices is -1 (invalid index)
+        temp_colval = ones(Ti, slice_size, max_nnz) .* -1
         temp_nzval = zeros(Tv, slice_size, max_nnz)
-        for row in slice_start:slice_end
+        for row = slice_start:slice_end
             if row > size(m_t, 2)
                 break
             end
             start = rowptr[row]
-            end_ = rowptr[row + 1] - 1
-            temp_colval[row - slice_start + 1, 1:(end_ - start + 1)] = colval[start:end_]
-            temp_nzval[row - slice_start + 1, 1:(end_ - start + 1)] = nzval[start:end_]
+            end_ = rowptr[row+1] - 1
+            temp_colval[row-slice_start+1, 1:(end_-start+1)] = colval[start:end_]
+            temp_nzval[row-slice_start+1, 1:(end_-start+1)] = nzval[start:end_]
         end
         # Reshape the sub-matrix to make it column-major vector and copy it to final storage
-       
-        colval_padded[slice_ptr[slice]:slice_ptr[slice + 1] - 1] =
+
+        colval_padded[slice_ptr[slice]:(slice_ptr[slice+1]-1)] =
             collect(Iterators.flatten(temp_colval)) # matrix -> transposed matrix -> vector with inverted dimensions
-        nzval_padded[slice_ptr[slice]:slice_ptr[slice + 1] - 1] =
+        nzval_padded[slice_ptr[slice]:(slice_ptr[slice+1]-1)] =
             collect(Iterators.flatten(temp_nzval))
 
 
@@ -362,10 +365,10 @@ end
 
 function SparseGPUMatrixSELL(
     m::SparseMatrixCSC{Tv,Ti},
-    slice_size::Int,
     backend::Backend,
+    slice_size::Int = 32,
 ) where {Tv,Ti<:Integer}
-    SparseGPUMatrixSELL(transpose(sparse(transpose(m))), slice_size, backend)
+    SparseGPUMatrixSELL(transpose(sparse(transpose(m))), backend, slice_size)
 end
 
 
@@ -554,7 +557,7 @@ function Base.getindex(A::SparseGPUMatrixCSC, i::Int, j::Int)
     if i < 1 || i > A.m || j < 1 || j > A.n
         throw(BoundsError(A, (i, j)))
     end
-    row = findfirst(A.rowval[A.colptr[j]:A.colptr[j+1]-1] .== i)
+    row = findfirst(A.rowval[A.colptr[j]:(A.colptr[j+1]-1)] .== i)
     if row === nothing
         return zero(eltype(A.nzval))
     else
@@ -566,7 +569,7 @@ function Base.setindex!(A::SparseGPUMatrixCSC, v, i::Int, j::Int)
     if i < 1 || i > A.m || j < 1 || j > A.n
         throw(BoundsError(A, (i, j)))
     end
-    row = findfirst(A.rowval[A.colptr[j]:A.colptr[j+1]-1] .== i)
+    row = findfirst(A.rowval[A.colptr[j]:(A.colptr[j+1]-1)] .== i)
     if row === nothing
         throw(
             ArgumentError(

@@ -1,6 +1,7 @@
 TEST_BACKEND = if get(ENV, "CI", "false") == "false"
 
-    Metal.MetalBackend()  # our personal laptops
+    #Metal.MetalBackend()  # our personal laptops
+    CUDA.CUDABackend()  # on the cluster
 # KernelAbstractions.CPU()
 else
     KernelAbstractions.CPU()
@@ -160,14 +161,14 @@ end
     end
 end
 
-@testset "SparseGPUMatrixELL" begin
+@testset "SparseGPUMatrixSELL" begin
     @testset "constructor" begin
         TEST_VECTOR_TYPE_VALS = typeof(allocate(TEST_BACKEND, Float32, 0))
         TEST_VECTOR_TYPE_INDS = typeof(allocate(TEST_BACKEND, Int32, 0))
-        function test_vector_types(A::SparseGPUMatrixELL, vals, inds)
-            @test typeof(A.nnz_per_row) == inds
+        function test_vector_types(A::SparseGPUMatrixSELL, vals, inds)
             @test typeof(A.colval) == inds
             @test typeof(A.nzval) == vals
+            @test typeof(A.slice_ptr) == inds
         end
 
         @testset "non-empty" begin
@@ -184,15 +185,15 @@ end
             A_nnz = 8
             # Convert
             A_dense = convert(Matrix{Float32}, A_dense)
-            ref_nnz_per_row = [2, 3, 2, 1]
+            ref_slice_ptr = [1, 13]
             ref_colval = [1, 1, 2, 4, 2, 3, 3, PAD_VAL, PAD_VAL, 4, PAD_VAL, PAD_VAL]
             ref_nzval = [1, 5, 2, 6, 7, 3, 8, 0, 0, 9, 0, 0]
 
-            B_1 = SparseGPUMatrixELL(A_csc, TEST_BACKEND)
-            B_2 = SparseGPUMatrixELL(transpose(A_csc_t), TEST_BACKEND)
-            B_3 = SparseGPUMatrixELL(A_dense, TEST_BACKEND)
+            B_1 = SparseGPUMatrixSELL(A_csc, TEST_BACKEND)
+            B_2 = SparseGPUMatrixSELL(transpose(A_csc_t), TEST_BACKEND)
+            B_3 = SparseGPUMatrixSELL(A_dense, TEST_BACKEND)
 
-            function test_constructor(A::SparseGPUMatrixELL)
+            function test_constructor(A::SparseGPUMatrixSELL)
                 @test size(A, 1) == 4
                 @test size(A, 2) == 4
                 @test size(A) == (4, 4)
@@ -200,7 +201,7 @@ end
                 @test nnz(A) == A_nnz
                 @test get_backend(A) == TEST_BACKEND
                 display(A)
-                @allowscalar @test A.nnz_per_row == ref_nnz_per_row
+                @allowscalar @test A.slice_ptr == ref_slice_ptr
                 @allowscalar @test A.colval == ref_colval
                 @allowscalar @test A.nzval == ref_nzval
                 test_vector_types(A, TEST_VECTOR_TYPE_VALS, TEST_VECTOR_TYPE_INDS)

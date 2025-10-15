@@ -15,7 +15,7 @@
     # Computes A*B and stores the result in C
     row = @index(Global, Linear)
     acc = monoid_neutral_element
-    for i = a_row_ptr[row]:a_row_ptr[row+1]-1
+    for i = a_row_ptr[row]:(a_row_ptr[row+1]-1)
         col = a_col_val[i]
         acc = add(acc, mul(a_nz_val[i], b[col], row, col, col, 1), row, col, col, 1)
         if acc == terminal_value
@@ -42,7 +42,7 @@ end
     entry_nb = @index(Global, Linear)
     row = mask[entry_nb]
     acc = monoid_neutral_element
-    for i = a_row_ptr[row]:a_row_ptr[row+1]-1
+    for i = a_row_ptr[row]:(a_row_ptr[row+1]-1)
         col = a_col_val[i]
         acc = add(acc, mul(a_nz_val[i], b[col], row, col, col, 1), row, col, col, 1)
         if acc == terminal_value
@@ -70,7 +70,7 @@ end
     row = @index(Global, Linear)
     if mask[row] != mask_zero
         acc = monoid_neutral_element
-        for i = a_row_ptr[row]:a_row_ptr[row+1]-1
+        for i = a_row_ptr[row]:(a_row_ptr[row+1]-1)
             col = a_col_val[i]
             acc = add(acc, mul(a_nz_val[i], b[col], row, col, col, 1), row, col, col, 1)
             if acc == terminal_value
@@ -95,11 +95,12 @@ end
     # Computes A*B and stores the result in C
     row = @index(Global, Linear)
     if mask[row] != mask_zero
-        for i = a_row_ptr[row]:a_row_ptr[row+1]-1
+        for i = a_row_ptr[row]:(a_row_ptr[row+1]-1)
             col = a_col_val[i]
             b_val = b[col]
             if b_val != zero(b_val)
-                c[row] = accum(c[row], mul(a_nz_val[i], b_val, row, col, col, 1), row, 1, row, 1)
+                c[row] =
+                    accum(c[row], mul(a_nz_val[i], b_val, row, col, col, 1), row, 1, row, 1)
                 break
             end
         end
@@ -145,8 +146,8 @@ function gpu_spmv!(
             A.colval,
             A.nzval,
             B,
-            monoid_neutral(Tv, add),
-            monoid_absorb(Tv, add),
+            monoid_neutral(promote_type(Tv, InputType), add),
+            monoid_absorb(promote_type(Tv, InputType), add),
             mul,
             add,
             accum;
@@ -176,8 +177,8 @@ function gpu_spmv!(
             A.colval,
             A.nzval,
             B,
-            monoid_neutral(Tv, add),
-            monoid_absorb(Tv, add),
+            monoid_neutral(promote_type(Tv, InputType), add),
+            monoid_absorb(promote_type(Tv, InputType), add),
             mask.nzind,
             mul,
             add,
@@ -213,8 +214,8 @@ function gpu_spmv!(
             A.colval,
             A.nzval,
             B,
-            monoid_neutral(Tv, add),
-            monoid_absorb(Tv, add),
+            monoid_neutral(promote_type(Tv, InputType), add),
+            monoid_absorb(promote_type(Tv, InputType), add),
             mask,
             zero(Tmask),
             mul,
@@ -242,7 +243,7 @@ end
     # Computes A*B and stores the result in C
     col = @index(Global, Linear)
     acc = monoid_neutral_element
-    for i = a_col_ptr[col]:a_col_ptr[col+1]-1
+    for i = a_col_ptr[col]:(a_col_ptr[col+1]-1)
         row = a_row_val[i]
         acc = mul(b[col], a_nz_val[i], row, col, col, 1)
         Atomix.@atomic c[row] += acc
@@ -250,13 +251,20 @@ end
 end
 
 function gpu_spmv!(
-    C::AV,
+    C::ResVec,
     A::SparseGPUMatrixCSC{Tv,Ti},
-    B::AV;
+    B::InputVec;
     mul::Function = GPUGraphs_mul,
     add::Function = GPUGraphs_add,
     accum::Function = GPUGraphs_second,
-) where {Tv,Ti,AV<:AbstractVector{Tv}}
+) where {
+    Tv,
+    Ti,
+    ResType<:Number,
+    InputType<:Number,
+    ResVec<:AbstractVector{ResType},
+    InputVec<:AbstractVector{InputType},
+}
     # Computes A*B and stores the result in C
     # Check dimensions
     if size(A, 2) != length(B)
@@ -274,7 +282,7 @@ function gpu_spmv!(
         A.rowval,
         A.nzval,
         B,
-        monoid_neutral(Tv, add),
+        monoid_neutral(promote_type(Tv, InputType), add),
         mul,
         add,
         accum;
@@ -296,23 +304,19 @@ end
     add,
     accum,
 )
-    offset, slice = @index(Global, NTuple)
-    offset = offset - 1
-    row = (slice-1) * slice_size + offset + 1
-
-    #row = @index(Global, Linear)
-    #slice = (row-1) ÷ slice_size + 1
-    #offset = (row-1) % slice_size
+    #offset, slice = @index(Global, NTuple)
+    #offset = offset - 1
+    #row = (slice-1) * slice_size + offset + 1
+    row = @index(Global, Linear)
+    slice = (row-1) ÷ slice_size + 1
+    offset = (row-1) % slice_size
     if row <= n
         start = a_slice_ptr[slice] + offset
-        stop = a_slice_ptr[slice + 1] - 1
+        stop = a_slice_ptr[slice+1] - 1
         acc = monoid_neutral_element
         for i = start:slice_size:stop
-            #if i > length(a_nz_val)
-            #    break
-            #end
             col = a_col_val[i]
-            if col == 0 # This is a padding value. The remaining values are all 0
+            if col == -1
                 break
             end
             acc = add(acc, mul(a_nz_val[i], b[col], row, col, col, 1), row, col, col, 1)
@@ -325,7 +329,8 @@ end
     c,
     @Const(a_col_val),
     @Const(a_nz_val),
-    @Const(a_nnz_per_row),
+    @Const(a_slice_ptr),
+    @Const(slice_size),
     @Const(n),
     @Const(b),
     @Const(monoid_neutral_element),
@@ -335,62 +340,23 @@ end
     add,
     accum,
 )
-    offset, slice = @index(Global, NTuple)
-    offset = offset - 1
-    row = (slice-1) * slice_size + offset + 1
+    row = @index(Global, Linear)
+    if mask[row] != mask_zero
+        slice = (row-1) ÷ slice_size + 1
+        offset = (row-1) % slice_size
 
     if row <= n && mask[row] != mask_zero
         start = a_slice_ptr[slice] + offset
         stop = a_slice_ptr[slice + 1] - 1
         acc = monoid_neutral_element
-        for i = start:slice_size:stop
-            #if i > length(a_nz_val)
-            #    break
-            #end
+        for i = (a_slice_ptr[slice]+offset):slice_size:(a_slice_ptr[slice+1]-1)
             col = a_col_val[i]
-            if col == 0 # This is a padding value. The remaining values are all 0
+            if col == -1
                 break
             end
             acc = add(acc, mul(a_nz_val[i], b[col], row, col, col, 1), row, col, col, 1)
         end
         c[row] = accum(c[row], acc, row, 1, row, 1)
-    end
-end
-
-@kernel function any_dense_masked_sell_spmv_kernel!(
-    c,
-    @Const(a_col_val),
-    @Const(a_nz_val),
-    @Const(a_slice_ptr),
-    @Const(slice_size),
-    @Const(n),
-    @Const(b),
-    @Const(mask),
-    @Const(mask_zero),
-    mul,
-    accum,
-)
-    offset, slice = @index(Global, NTuple)
-    offset = offset - 1
-    row = (slice-1) * slice_size + offset + 1
-
-    if row <= n && mask[row] != mask_zero
-        start = a_slice_ptr[slice] + offset
-        stop = a_slice_ptr[slice + 1] - 1
-        for i = start:slice_size:stop
-            #if i > length(a_nz_val)
-            #    break
-            #end
-            col = a_col_val[i]
-            if col == 0 # This is a padding value. The remaining values are all 0
-                break
-            end
-            b_val = b[col]
-            if b_val != zero(b_val)
-                c[row] = accum(c[row], mul(a_nz_val[i], b_val, row, col, col, 1), row, 1, row, 1)
-                break
-            end
-        end
     end
 end
 
@@ -425,9 +391,22 @@ function gpu_spmv!(
     # Call the kernel
     backend = get_backend(A)
 
-    # No mask
-    if mask === nothing
-        kernel! = sell_spmv_kernel!(backend)
+    # Using mask 
+    if mask !== nothing
+        # Check mask type
+        if !(typeof(mask) <: AbstractVector{Tmask})
+            throw(DimensionMismatch("Mask must be a vector"))
+        end
+        # Check mask length
+        if length(mask) != size(A, 1)
+            throw(DimensionMismatch("Mask length must be equal to the number of rows in A"))
+        end
+        # Check mask backend
+        if get_backend(mask) != backend
+            throw(ArgumentError("Mask must be on the same backend as A"))
+        end
+
+        kernel! = dense_masked_sell_spmv_kernel!(backend)
         kernel!(
             C,
             A.colval,
@@ -436,39 +415,7 @@ function gpu_spmv!(
             A.slice_size,
             A.n,
             B,
-            monoid_neutral(Tv, add),
-            mul,
-            add,
-            accum;
-            ndrange = (A.slice_size, A.nslices),
-        )
-        return
-    end
-
-    # Check mask type
-    if !(typeof(mask) <: AbstractVector{Tmask})
-        throw(DimensionMismatch("Mask must be a vector"))
-    end
-    # Check mask length
-    if length(mask) != size(A, 1)
-        throw(DimensionMismatch("Mask length must be equal to the number of rows in A"))
-    end
-    # Check mask backend
-    if get_backend(mask) != backend
-        throw(ArgumentError("Mask must be on the same backend as A"))
-    end
-
-    # Any operator 
-    if add == GPUGraphs_any
-        kernel! = any_dense_masked_sell_spmv_kernel!(backend)
-        kernel!(
-            C,
-            A.colval,
-            A.nzval,
-            A.slice_ptr,
-            A.slice_size,
-            A.n,
-            B,
+            monoid_neutral(promote_type(Tv, InputType), add),
             mask,
             zero(Tmask),
             mul,
@@ -486,13 +433,11 @@ function gpu_spmv!(
         A.slice_ptr,
         A.slice_size,
         B,
-        monoid_neutral(Tv, add),
-        mask,
-        zero(Tmask),
+        monoid_neutral(promote_type(Tv, InputType), add),
         mul,
         add,
         accum;
-        ndrange = (A.slice_size, A.nslices),
+        ndrange = size(A, 1),
     )
     return
     
