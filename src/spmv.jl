@@ -340,15 +340,18 @@ end
     add,
     accum,
 )
+    #slice, offset = @index(Global, NTuple)
+    #offset = offset - 1
+    #row = (slice-1) * slice_size + offset + 1
     row = @index(Global, Linear)
-    if mask[row] != mask_zero
-        slice = (row-1) ÷ slice_size + 1
-        offset = (row-1) % slice_size
+    slice = (row-1) ÷ slice_size + 1
+    offset = (row-1) % slice_size
+    if row <= n && mask[row] != mask_zero
 
         acc = monoid_neutral_element
         for i = (a_slice_ptr[slice]+offset):slice_size:(a_slice_ptr[slice+1]-1)
             col = a_col_val[i]
-            if col == -1
+            if col == -1 || 
                 break
             end
             acc = add(acc, mul(a_nz_val[i], b[col], row, col, col, 1), row, col, col, 1)

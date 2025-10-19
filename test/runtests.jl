@@ -41,9 +41,9 @@ const PAD_VAL = -1
 
 
 
-    #include("structs.jl")
-    #include("spmv.jl")
-    #include("spmm.jl")
-    #include("bfs.jl")
+    include("structs.jl")
+    include("spmv.jl")
+    include("spmm.jl")
+    include("bfs.jl")
     include("shortest_path.jl")
 end

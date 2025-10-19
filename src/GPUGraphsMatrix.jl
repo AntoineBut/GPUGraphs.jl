@@ -205,6 +205,7 @@ mutable struct SparseGPUMatrixSELL{
 } <: AbstractSparseGPUMatrix{Tv,Ti}
     m::Int
     n::Int
+    perm::Vector{Int}  # Row permutation to reduce padding (not implemented yet)
     slice_size::Int
     nslices::Int    # Number of slices
     nnz::Int        # Number of nonzeros
@@ -219,6 +220,7 @@ mutable struct SparseGPUMatrixSELL{
     function SparseGPUMatrixSELL(
         m::Int,
         n::Int,
+        perm::Vector{Int},
         slice_size::Int,
         nslices::Int,
         nnz::Int,
@@ -269,6 +271,7 @@ mutable struct SparseGPUMatrixSELL{
         new{Tv,Ti,typeof(nzval_gpu),typeof(slice_ptr_gpu)}(
             m,
             n,
+            perm,
             slice_size,
             nslices,
             nnz,
@@ -304,6 +307,10 @@ function SparseGPUMatrixSELL(
     max_nnz_per_slice = zeros(Int, n_slices)
     nnz_per_row = diff(rowptr)
 
+    # Compute optimal permutation of rows to minimize padding (not implemented yet)
+    perm = reverse!(sortperm(nnz_per_row[:]))
+    nnz_per_row = nnz_per_row[perm]
+
     # Compute the maximum number of nonzeros per row for each slice
     n_stored = 0
     for i = 1:n_slices
@@ -333,11 +340,15 @@ function SparseGPUMatrixSELL(
             if row > size(m_t, 2)
                 break
             end
-            start = rowptr[row]
-            end_ = rowptr[row+1] - 1
+
+            start = rowptr[perm[row]]
+            end_ = rowptr[perm[row]+1] - 1
             temp_colval[row-slice_start+1, 1:(end_-start+1)] = colval[start:end_]
             temp_nzval[row-slice_start+1, 1:(end_-start+1)] = nzval[start:end_]
+
+
         end
+        
         # Reshape the sub-matrix to make it column-major vector and copy it to final storage
 
         colval_padded[slice_ptr[slice]:(slice_ptr[slice+1]-1)] =
@@ -346,11 +357,13 @@ function SparseGPUMatrixSELL(
             collect(Iterators.flatten(temp_nzval))
 
 
+
     end
 
     SparseGPUMatrixSELL(
         size(m_t, 2),
         size(m_t, 1),
+        perm,
         slice_size,
         n_slices,
         nnz(m_t),
@@ -372,7 +385,7 @@ function SparseGPUMatrixSELL(
 end
 
 
-# Base methods for the SparseGPUMatrixCSR type
+# Base methods for the SparseGPUMatrixSELL type
 Base.size(A::SparseGPUMatrixSELL) = (A.m, A.n)
 Base.size(A::SparseGPUMatrixSELL, i::Int) = (i == 1) ? A.m : A.n
 Base.length(A::SparseGPUMatrixSELL) = A.m * A.n
@@ -385,7 +398,7 @@ Base.display(A::SparseGPUMatrixSELL) = show(stdout, A)
 
 
 function Base.getindex(A::SparseGPUMatrixSELL, i::Int, j::Int)
-    #@warn "Scalar indexing on a SparseGPUMatrixCSR is slow. For better performance, vectorize the operation."
+    #@warn "Scalar indexing on a SparseGPUMatrixSELL is slow. For better performance, vectorize the operation."
     if i < 1 || i > A.m || j < 1 || j > A.n
         throw(BoundsError(A, (i, j)))
     end
