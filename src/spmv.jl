@@ -351,7 +351,7 @@ end
         acc = monoid_neutral_element
         for i = (a_slice_ptr[slice]+offset):slice_size:(a_slice_ptr[slice+1]-1)
             col = a_col_val[i]
-            if col == -1 || 
+            if col == -1 
                 break
             end
             acc = add(acc, mul(a_nz_val[i], b[col], row, col, col, 1), row, col, col, 1)
