@@ -57,6 +57,7 @@ function shortest_path!(
     while true
 
         iter += one(Ti)
+        
         gpu_spmv!(
             next,
             A_T,
@@ -67,10 +68,13 @@ function shortest_path!(
             #mask = updated, Not used yet
         )
         # Diff : where we made progress
-        @. diff = next < dist
-        if reduce(|, diff) == zero(Td)
-            return nothing
+        if iter%8 == 0
+            @. diff = next < dist
+            if reduce(|, diff) == zero(Td)
+                return nothing
+            end
         end
+        
         # Update the dist array
         dist .= next
 

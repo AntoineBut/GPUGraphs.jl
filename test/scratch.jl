@@ -109,41 +109,46 @@ using HarwellRutherfordBoeing
 
 MAIN_TYPE = Bool
 #MAIN_TYPE = Float32
+RES_TYPE = ifelse(MAIN_TYPE == Bool, Int32, MAIN_TYPE)
 BACKEND = CUDA.CUDABackend()
 
-ssmc = ssmc_db();
-orkut_path = fetch_ssmc(ssmc_matrices(ssmc, "SNAP", "Orkut"), format = "RB")[1]
-loaded_matrix = RutherfordBoeingData(joinpath(orkut_path, "com-Orkut.rb"));
-graph = SimpleDiGraph(loaded_matrix.data)
+use_dataset = true
+graph = dorogovtsev_mendes(150)
+if use_dataset
+    ssmc = ssmc_db();
+    orkut_path = fetch_ssmc(ssmc_matrices(ssmc, "SNAP", "Orkut"), format = "RB")[1]
+    nlpkkt_path = fetch_ssmc(ssmc_matrices(ssmc, "Schenk", "nlpkkt160"), format = "RB")[1]
 
-#graph = dorogovtsev_mendes(150)
-A_cpu = transpose(
-    convert(
+    #loaded_matrix = RutherfordBoeingData(joinpath(orkut_path, "com-Orkut.rb"));
+    loaded_matrix = RutherfordBoeingData(joinpath(nlpkkt_path, "nlpkkt160.rb"));
+    graph = SimpleDiGraph(loaded_matrix.data)
+else
+    graph = dorogovtsev_mendes(150)
+end
+A_cpu = transpose(convert(
         SparseMatrixCSC{MAIN_TYPE,Int32},
         adjacency_matrix(graph, MAIN_TYPE; dir = :both),
-    ),
-)
-#A2 = convert(
-#    SparseMatrixCSC{Bool,Int32},
-#    adjacency_matrix(graph, Bool; dir = :both),
-#)
+    ))
 
-#A_T_gpu2 = SparseGPUMatrixCSR(transpose(A2), BACKEND)
+
+
 SIZE = size(A_cpu, 2)
-SIZE_2 = 32
+A_T = SparseGPUMatrixSELL(A_cpu, BACKEND)
+A_T2 = SparseGPUMatrixCSR(A_cpu, BACKEND)
+
+SIZE_2 = 8
 
 B_cpu = rand(MAIN_TYPE, SIZE, SIZE_2);
 b_cpu = B_cpu[:, 1];
-C_cpu = zeros(MAIN_TYPE, SIZE, SIZE_2);
+C_cpu = zeros(RES_TYPE, SIZE, SIZE_2);
 
-A_T = SparseGPUMatrixSELL(A_cpu, BACKEND)
-A_T2 = SparseGPUMatrixCSR(A_cpu, BACKEND)
+
 B = KernelAbstractions.zeros(BACKEND, MAIN_TYPE, SIZE, SIZE_2);
 copyto!(B, B_cpu);
 b = KernelAbstractions.zeros(BACKEND, MAIN_TYPE, SIZE);
 copyto!(b, b_cpu);
-C = KernelAbstractions.zeros(BACKEND, MAIN_TYPE, SIZE, SIZE_2);
-c = KernelAbstractions.zeros(BACKEND, MAIN_TYPE, SIZE);
+C = KernelAbstractions.zeros(BACKEND, RES_TYPE, SIZE, SIZE_2);
+c = KernelAbstractions.zeros(BACKEND, RES_TYPE, SIZE);
 
 mask = rand(Bool, SIZE)
 mask_dense = KernelAbstractions.zeros(BACKEND, Bool, SIZE)
@@ -169,7 +174,14 @@ isapprox(C_cpu, C_res)
     end
     CUDA.synchronize()
 end
-c_res = zeros(MAIN_TYPE, SIZE);
+@benchmark begin
+    for _ = 1:SIZE_2
+        gpu_spmv!(c, A_T2, b, mask = mask_dense)
+    end
+    CUDA.synchronize()
+end
+
+c_res = zeros(RES_TYPE, SIZE);
 copyto!(c_res, c);
 c_cpu = A_cpu * b_cpu .* mask;
 isapprox(c_cpu, c_res)
@@ -201,7 +213,7 @@ isapprox(mat_res_cpu, vec_res)
 
 
 @benchmark begin
-    mat_res = GPUGraphs.shortest_path(A_T2, convert(Vector{Int32}, range(1, SIZE_2)));
+    mat_res = GPUGraphs.shortest_path(A_T, convert(Vector{Int32}, range(1, SIZE_2)));
     KernelAbstractions.synchronize(BACKEND)
 end
 
