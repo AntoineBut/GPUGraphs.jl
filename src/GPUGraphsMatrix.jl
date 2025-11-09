@@ -308,7 +308,8 @@ function SparseGPUMatrixSELL(
     nnz_per_row = diff(rowptr)
 
     # Compute optimal permutation of rows to minimize padding (not implemented yet)
-    perm = reverse!(sortperm(nnz_per_row[:]))
+    #perm = reverse!(sortperm(nnz_per_row[:]))
+    perm = collect(1:size(m_t, 2))
     nnz_per_row = nnz_per_row[perm]
 
     # Compute the maximum number of nonzeros per row for each slice
