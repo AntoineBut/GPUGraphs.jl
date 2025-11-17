@@ -187,4 +187,3 @@ sprand_gpu(::Type{Tv}, m::Int, n::Int, p::Real, backend::Backend) where {Tv} =
 
 # KA functions
 KernelAbstractions.get_backend(A::SparseGPUMatrixCSR) = get_backend(A.nzval)
-

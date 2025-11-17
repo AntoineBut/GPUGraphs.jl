@@ -3,8 +3,8 @@
 "
     Abstract type for a GPU compatible sparse matrix
 "
-abstract type AbstractSparseGPUMatrix{Tv,Ti<:Integer} <: SparseArrays.AbstractSparseMatrix{Tv,Ti} 
-end
+abstract type AbstractSparseGPUMatrix{Tv,Ti<:Integer} <:
+              SparseArrays.AbstractSparseMatrix{Tv,Ti} end
 
 include("CSC.jl")
 include("CSR.jl")

@@ -152,7 +152,7 @@ function SparseGPUMatrixSELL(
 
 
         end
-        
+
         # Reshape the sub-matrix to make it column-major vector and copy it to final storage
 
         colval_padded[slice_ptr[slice]:(slice_ptr[slice+1]-1)] =
@@ -245,4 +245,3 @@ SparseArrays.nnz(A::SparseGPUMatrixSELL) = A.nnz
 
 # KA functions
 KernelAbstractions.get_backend(A::SparseGPUMatrixSELL) = get_backend(A.nzval)
-

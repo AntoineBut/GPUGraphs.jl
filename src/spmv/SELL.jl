@@ -6,8 +6,8 @@ function gpu_spmv!(
     mul::Function = GPUGraphs_mul,
     add::Function = GPUGraphs_add,
     accum::Function = GPUGraphs_second,
-    range::Union{Nothing, UnitRange} = nothing,
-    mask::Union{Nothing, AbstractVector} = nothing,
+    range::Union{Nothing,UnitRange} = nothing,
+    mask::Union{Nothing,AbstractVector} = nothing,
 ) where {
     Tv,
     Ti<:Integer,
@@ -20,9 +20,9 @@ function gpu_spmv!(
     if mask === nothing && range === nothing
         _simple_gpu_spmv!(C, A, B, mul, add, accum)
     elseif mask !== nothing && range === nothing
-        _dense_mask_gpu_spmv!(C, A, B,  mul, add, accum, mask)
+        _dense_mask_gpu_spmv!(C, A, B, mul, add, accum, mask)
     elseif mask === nothing && range !== nothing
-        _range_gpu_spmv!(C, A, B,mul, add, accum, range)
+        _range_gpu_spmv!(C, A, B, mul, add, accum, range)
     else
         _range_mask_gpu_spmv!(C, A, B, mul, add, accum, mask, range)
     end
@@ -123,7 +123,7 @@ end
         acc = monoid_neutral_element
         for i = (a_slice_ptr[slice]+offset):slice_size:(a_slice_ptr[slice+1]-1)
             col = a_col_val[i]
-            if col == -1 
+            if col == -1
                 break
             end
             acc = add(acc, mul(a_nz_val[i], b[col], row, col, col, 1), row, col, col, 1)
@@ -273,7 +273,7 @@ end
         acc = monoid_neutral_element
         for i = (a_slice_ptr[slice]+offset):slice_size:(a_slice_ptr[slice+1]-1)
             col = a_col_val[i]
-            if col == -1 
+            if col == -1
                 break
             end
             acc = add(acc, mul(a_nz_val[i], b[col], row, col, col, 1), row, col, col, 1)
@@ -342,7 +342,7 @@ function _validate_args(
     MaskVec<:AbstractVector{Tmask},
 }
     # Check dimensions
-    if size(A, 2) != length(B) 
+    if size(A, 2) != length(B)
         throw(DimensionMismatch("Matrix dimensions must agree"))
     end
     if size(C, 1) != size(A, 1)
@@ -350,14 +350,18 @@ function _validate_args(
     end
     # Check types
     if !(promote_type(Tv, InputType) <: ResType)
-        throw(ArgumentError("Result type must be able to hold the result of the multiplication"))
+        throw(
+            ArgumentError(
+                "Result type must be able to hold the result of the multiplication",
+            ),
+        )
     end
     # Check backends
     backend = get_backend(A)
     if get_backend(B) != backend || get_backend(C) != backend
         throw(ArgumentError("All inputs must be on the same backend"))
     end
-     # Check mask if provided
+    # Check mask if provided
     if mask !== nothing
         # Check mask type
         if !(typeof(mask) <: AbstractVector{Tmask})

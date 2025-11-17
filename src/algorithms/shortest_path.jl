@@ -57,7 +57,7 @@ function shortest_path!(
     while true
 
         iter += one(Ti)
-        
+
         gpu_spmv!(
             next,
             A_T,
@@ -74,7 +74,7 @@ function shortest_path!(
                 return nothing
             end
         end
-        
+
         # Update the dist array
         dist .= next
 

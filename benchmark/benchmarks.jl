@@ -56,8 +56,8 @@ BFS_RESULTS =
     DataFrame(operation = String[], size = Int[], implementation = String[], time = Real[])
 
 for SIZE in SIZES
-    SIZE2 = SIZE 
-    FILL = 0.001 
+    SIZE2 = SIZE
+    FILL = 0.001
     print("Generating random sparse matrix of size $SIZE x $SIZE2 with fill $FILL\n")
     A_csc_cpu =
         convert(SparseMatrixCSC{MAIN_TYPE,INDEX_TYPE}, sprand(MAIN_TYPE, SIZE2, SIZE, FILL))
@@ -308,7 +308,7 @@ for i = 1:4
         KernelAbstractions.synchronize(BACKEND)
     end evals = 1 setup =
         (res_gpu = KernelAbstractions.zeros(BACKEND, ELTYPE_RES, $SIZE))
-        
+
     SUITE2["mul!"]["GPU"]["GPUGraphsSELL"] = @benchmarkable begin
         for j = 1:10
             gpu_spmv!(res_gpu, $A_sell_gpu, $b_gpu; mul = MUL, add = ADD, accum = ACCUM)
@@ -324,46 +324,51 @@ for i = 1:4
         KernelAbstractions.synchronize(BACKEND)
     end evals = 1 setup =
         (res_gpu = KernelAbstractions.zeros(BACKEND, ELTYPE_RES, $SIZE))
-    
+
 
     graph = SimpleGraph(A_T)
     println("Built graph. ")
 
-    A_csr_cpu = transpose(convert(SparseMatrixCSC{BOOL_TYPE,INDEX_TYPE}, adjacency_matrix(graph, BOOL_TYPE; dir = :out)))
+    A_csr_cpu = transpose(
+        convert(
+            SparseMatrixCSC{BOOL_TYPE,INDEX_TYPE},
+            adjacency_matrix(graph, BOOL_TYPE; dir = :out),
+        ),
+    )
     print("Converting to GPU-CSR format\n")
     A_csr_gpu = SparseGPUMatrixCSR(A_csr_cpu, BACKEND)
 
     print("Converting to SELL format\n")
     A_sell_gpu = SparseGPUMatrixSELL(A_csr_cpu, 64, BACKEND)
 
-        SUITE2["bfs"]["CPU"]["SuiteSparseGraphBLAS"] = @benchmarkable begin
-            bfs_BLAS!($A_ssGB, one(INDEX_TYPE), res_ssGB)
-        end evals = 1 setup =
-            (res_ssGB = GBVector{INDEX_TYPE}($SIZE, fill = zero(INDEX_TYPE)))
+    SUITE2["bfs"]["CPU"]["SuiteSparseGraphBLAS"] = @benchmarkable begin
+        bfs_BLAS!($A_ssGB, one(INDEX_TYPE), res_ssGB)
+    end evals = 1 setup =
+        (res_ssGB = GBVector{INDEX_TYPE}($SIZE, fill = zero(INDEX_TYPE)))
 
-        SUITE2["bfs"]["GPU"]["GPUGraphsCSR"] = @benchmarkable begin
-            GPUGraphs.bfs_parents($A_csr_gpu, one(INDEX_TYPE))
+    SUITE2["bfs"]["GPU"]["GPUGraphsCSR"] = @benchmarkable begin
+        GPUGraphs.bfs_parents($A_csr_gpu, one(INDEX_TYPE))
+        KernelAbstractions.synchronize(BACKEND)
+    end evals = 1
+
+end
+
+if i >= 2
+
+    SUITE2["mul!"]["GPU"]["GPUGraphsSELL"] = @benchmarkable begin
+        for j = 1:10
+            gpu_spmv!(res_gpu, $A_sell_gpu, $b_gpu; mul = MUL, add = ADD, accum = ACCUM)
+        end
+        KernelAbstractions.synchronize(BACKEND)
+    end evals = 1 setup =
+        (res_gpu = KernelAbstractions.zeros(BACKEND, ELTYPE_RES, $SIZE))
+
+    if MAIN_TYPE == Bool
+        SUITE2["bfs"]["GPU"]["GPUGraphsSELL"] = @benchmarkable begin
+            GPUGraphs.bfs_parents($A_sell_gpu, one(INDEX_TYPE))
             KernelAbstractions.synchronize(BACKEND)
         end evals = 1
-
     end
-
-    if i >= 2
-
-        SUITE2["mul!"]["GPU"]["GPUGraphsSELL"] = @benchmarkable begin
-            for j = 1:10
-                gpu_spmv!(res_gpu, $A_sell_gpu, $b_gpu; mul = MUL, add = ADD, accum = ACCUM)
-            end
-            KernelAbstractions.synchronize(BACKEND)
-        end evals = 1 setup =
-            (res_gpu = KernelAbstractions.zeros(BACKEND, ELTYPE_RES, $SIZE))
-
-        if MAIN_TYPE == Bool
-            SUITE2["bfs"]["GPU"]["GPUGraphsSELL"] = @benchmarkable begin
-                GPUGraphs.bfs_parents($A_sell_gpu, one(INDEX_TYPE))
-                KernelAbstractions.synchronize(BACKEND)
-            end evals = 1
-        end
 
     println("Launching benchmarks\n")
     bench_res2 = run(SUITE2)
