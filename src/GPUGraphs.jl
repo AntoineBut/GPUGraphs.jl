@@ -11,10 +11,10 @@ using LinearAlgebra
 
 
 include("algebra.jl")
-include("GPUGraphsMatrix.jl")
+include("storage/GPUGraphsMatrix.jl")
 include("GPUGraphsVector.jl")
-include("spmv.jl")
-include("spmm.jl")
+include("spmv/spmv.jl")
+include("spmm/spmm.jl")
 include("spmspv.jl")
 include("e_wise_ops.jl")
 include("map_and_reduce.jl")
