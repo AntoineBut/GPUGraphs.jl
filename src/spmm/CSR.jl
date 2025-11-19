@@ -48,8 +48,8 @@ end
     accum,
 )
     # Computes A*B and stores the result in C
-    #col_B_C, row = @index(Global, NTuple)
-    row, col_B_C = @index(Global, NTuple)
+    col_B_C, row = @index(Global, NTuple)
+    #row, col_B_C = @index(Global, NTuple)
     row += range_start - 1
     acc = monoid_neutral_element
     for i = a_row_ptr[row]:(a_row_ptr[row+1]-1)
@@ -150,8 +150,8 @@ function gpu_spmm!(
             add,
             accum,
             #ndrange = (size(A, 1),) # linear
-            #ndrange = (size(B, 2), size(A, 1)),
-            ndrange = (size(A, 1), size(B, 2))
+            ndrange = (size(B, 2), size(A, 1)),
+            #ndrange = (size(A, 1), size(B, 2))
         )
         return
     end
@@ -159,7 +159,7 @@ function gpu_spmm!(
     if range !== nothing
         @assert mask === nothing
         @assert range.start >= 1 && range.stop <= size(A, 1)
-
+        #println("Executing range CSR SpMM from $(range.start) to $(range.stop)")
         kernel! = range_csr_spmm_kernel!(backend)
         kernel!(
             C,
@@ -173,7 +173,7 @@ function gpu_spmm!(
             mul,
             add,
             accum,
-            ndrange = (size(range, 1), size(B, 2)),
+            ndrange = (size(B, 2), size(range, 1)),
         )
         
 
