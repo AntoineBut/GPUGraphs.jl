@@ -34,6 +34,42 @@
     C[row, col_B_C] = accum(C[row, col_B_C], acc, row, col_B_C, row, col_B_C)
 end
 
+@kernel function range_csr_spmm_kernel!(
+    C,
+    @Const(a_row_ptr),
+    @Const(a_col_val),
+    @Const(a_nz_val),
+    @Const(B),
+    @Const(monoid_neutral_element),
+    @Const(terminal_value),
+    @Const(range_start),
+    mul,
+    add,
+    accum,
+)
+    # Computes A*B and stores the result in C
+    #col_B_C, row = @index(Global, NTuple)
+    row, col_B_C = @index(Global, NTuple)
+    row += range_start - 1
+    acc = monoid_neutral_element
+    for i = a_row_ptr[row]:(a_row_ptr[row+1]-1)
+
+        col_A = a_col_val[i]
+        acc = add(
+            acc,
+            mul(a_nz_val[i], B[col_A, col_B_C], row, col_A, col_A, col_B_C),
+            row,
+            col_A,
+            col_A,
+            col_B_C,
+        )
+        if acc == terminal_value
+            break
+        end
+    end
+    C[row, col_B_C] = accum(C[row, col_B_C], acc, row, col_B_C, row, col_B_C)
+end
+
 @kernel function dense_masked_csr_spmm_kernel!(
     C,
     @Const(a_row_ptr),
@@ -49,8 +85,8 @@ end
     accum,
 )
     # Computes A*B and stores the result in C
-    col_B_C, row = @index(Global, NTuple)
-
+    #col_B_C, row = @index(Global, NTuple)
+    row, col_B_C = @index(Global, NTuple)
     if mask[row] != mask_zero
         acc = monoid_neutral_element
         for i = a_row_ptr[row]:(a_row_ptr[row+1]-1)
@@ -80,6 +116,7 @@ function gpu_spmm!(
     add::Function = GPUGraphs_add,
     accum::Function = GPUGraphs_second,
     mask::Union{MaskVec,Nothing} = nothing,
+    range::Union{UnitRange{Int},Nothing} = nothing,
 ) where {
     Tv,
     Ti<:Integer,
@@ -97,7 +134,7 @@ function gpu_spmm!(
 
     backend = get_backend(A)
 
-    if mask === nothing
+    if mask === nothing && range === nothing
 
         kernel! = csr_spmm_kernel!(backend)
         #kernel! = csr_spmm_kernel_vec!(backend)
@@ -113,9 +150,33 @@ function gpu_spmm!(
             add,
             accum,
             #ndrange = (size(A, 1),) # linear
-            ndrange = (size(B, 2), size(A, 1)),
-            #ndrange = (size(A, 1), size(B, 2))
+            #ndrange = (size(B, 2), size(A, 1)),
+            ndrange = (size(A, 1), size(B, 2))
         )
+        return
+    end
+
+    if range !== nothing
+        @assert mask === nothing
+        @assert range.start >= 1 && range.stop <= size(A, 1)
+
+        kernel! = range_csr_spmm_kernel!(backend)
+        kernel!(
+            C,
+            A.rowptr,
+            A.colval,
+            A.nzval,
+            B,
+            monoid_neutral(Tv, add),
+            monoid_absorb(Tv, add),
+            range.start,
+            mul,
+            add,
+            accum,
+            ndrange = (size(range, 1), size(B, 2)),
+        )
+        
+
         return
     end
 
@@ -136,7 +197,7 @@ function gpu_spmm!(
         mul,
         add,
         accum,
-        ndrange = (size(B, 2), size(A, 1)),
+        ndrange = (size(A, 1), size(B, 2)),
     )
 
     return
